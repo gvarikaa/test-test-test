@@ -163,9 +163,11 @@ export default function LeftSidebar() {
           <ul className="space-y-1 border-t border-border-color pt-2">
             {expandedMenuItems.map((item, index) => (
               <li key={index}>
-                <Link 
+                <Link
                   href={item.href}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-text-primary hover:bg-hover-bg"
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2 text-text-primary hover:bg-hover-bg ${
+                    item.href === "/groups" && typeof window !== "undefined" && window.location.pathname.startsWith("/groups") ? "bg-hover-bg font-medium" : ""
+                  }`}
                 >
                   <span className="text-text-primary">{item.icon}</span>
                   <span className="text-base">{item.label}</span>

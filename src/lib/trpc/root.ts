@@ -7,6 +7,7 @@ import { chatRouter } from './routers/chat';
 import { aiRouter } from './routers/ai';
 import { testRouter } from './routers/test';
 import { searchRouter } from './routers/search';
+import { groupRouter } from './routers/group';
 
 export const appRouter = router({
   user: userRouter,
@@ -16,7 +17,8 @@ export const appRouter = router({
   chat: chatRouter,
   ai: aiRouter,
   test: testRouter,
-  search: searchRouter, // Add search router
+  search: searchRouter,
+  group: groupRouter,
 });
 
 export type AppRouter = typeof appRouter;
