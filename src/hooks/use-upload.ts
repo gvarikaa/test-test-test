@@ -4,6 +4,8 @@ import { useState } from "react";
 import { MediaType } from "@prisma/client";
 
 interface UploadOptions {
+  file: File;
+  onProgress?: (progress: number) => void;
   maxSizeMB?: number;
   allowedTypes?: MediaType[];
   path?: string;
@@ -15,13 +17,18 @@ interface UploadResult {
   thumbnailUrl?: string;
 }
 
-export function useUpload(options: UploadOptions = {}) {
+export function useUpload() {
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  
+  // Keep track of the current XHR to allow cancellation
+  let currentXhr: XMLHttpRequest | null = null;
 
-  const upload = async (file: File): Promise<UploadResult | null> => {
+  const upload = async (options: UploadOptions): Promise<UploadResult | null> => {
     const {
+      file,
+      onProgress,
       maxSizeMB = 10,
       allowedTypes = ["IMAGE", "VIDEO", "AUDIO", "DOCUMENT"],
       path,
@@ -48,14 +55,16 @@ export function useUpload(options: UploadOptions = {}) {
 
     // Check file size
     if (file.size > maxSizeBytes) {
-      setError(`File size exceeds the limit of ${maxSizeMB}MB`);
+      const errorMsg = `File size exceeds the limit of ${maxSizeMB}MB`;
+      setError(errorMsg);
       return null;
     }
 
     // Check file type
     const mediaType = mimeToMediaType[file.type];
     if (!mediaType || !allowedTypes.includes(mediaType)) {
-      setError("File type not allowed");
+      const errorMsg = "File type not allowed";
+      setError(errorMsg);
       return null;
     }
 
@@ -73,14 +82,18 @@ export function useUpload(options: UploadOptions = {}) {
         formData.append("path", path);
       }
 
-      // Upload the file using the Fetch API with progress tracking
+      // Upload the file using XMLHttpRequest for progress tracking
       const xhr = new XMLHttpRequest();
+      currentXhr = xhr;
       
       const uploadPromise = new Promise<UploadResult>((resolve, reject) => {
         xhr.upload.addEventListener("progress", (event) => {
           if (event.lengthComputable) {
             const percentage = Math.round((event.loaded / event.total) * 100);
             setProgress(percentage);
+            if (onProgress) {
+              onProgress(event.loaded / event.total);
+            }
           }
         });
 
@@ -117,6 +130,7 @@ export function useUpload(options: UploadOptions = {}) {
       });
 
       const result = await uploadPromise;
+      currentXhr = null;
       return result;
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Upload failed";
@@ -124,12 +138,15 @@ export function useUpload(options: UploadOptions = {}) {
       return null;
     } finally {
       setIsUploading(false);
+      currentXhr = null;
     }
   };
 
   const cancelUpload = () => {
-    // Implementation to cancel the ongoing upload
-    // This would require access to the XHR object which we could store in a ref
+    if (currentXhr) {
+      currentXhr.abort();
+      currentXhr = null;
+    }
     setIsUploading(false);
     setProgress(0);
   };

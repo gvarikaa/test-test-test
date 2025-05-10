@@ -30,6 +30,15 @@ export default function LeftSidebar() {
     {
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-6">
+          <path d="M4 4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V6a2 2 0 00-2-2H4zm4 9v-2h4v-2H8V7h8v2h-4v2h4v2H8z" />
+        </svg>
+      ),
+      label: 'Reels',
+      href: '/reels'
+    },
+    {
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-6">
           <path d="M11.644 1.59a.75.75 0 01.712 0l9.75 5.25a.75.75 0 010 1.32l-9.75 5.25a.75.75 0 01-.712 0l-9.75-5.25a.75.75 0 010-1.32l9.75-5.25z" />
           <path d="M3.265 10.602l7.668 4.129a2.25 2.25 0 002.134 0l7.668-4.13 1.37.739a.75.75 0 010 1.32l-9.75 5.25a.75.75 0 01-.71 0l-9.75-5.25a.75.75 0 010-1.32l1.37-.738z" />
           <path d="M10.933 19.231l-7.668-4.13-1.37.739a.75.75 0 000 1.32l9.75 5.25c.221.12.489.12.71 0l9.75-5.25a.75.75 0 000-1.32l-1.37-.738-7.668 4.13a2.25 2.25 0 01-2.134-.001z" />
@@ -166,7 +175,10 @@ export default function LeftSidebar() {
                 <Link
                   href={item.href}
                   className={`flex items-center gap-3 rounded-lg px-3 py-2 text-text-primary hover:bg-hover-bg ${
-                    item.href === "/groups" && typeof window !== "undefined" && window.location.pathname.startsWith("/groups") ? "bg-hover-bg font-medium" : ""
+                    (item.href === "/groups" && typeof window !== "undefined" && window.location.pathname.startsWith("/groups")) ||
+                    (item.href === "/events" && typeof window !== "undefined" && window.location.pathname.startsWith("/events"))
+                      ? "bg-hover-bg font-medium"
+                      : ""
                   }`}
                 >
                   <span className="text-text-primary">{item.icon}</span>

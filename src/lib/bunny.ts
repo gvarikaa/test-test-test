@@ -20,7 +20,7 @@ export const generateUniqueFilename = (originalFilename: string): string => {
 export const uploadFileToBunny = async (
   file: File | Blob,
   folderPath: string = "/uploads"
-): Promise<string> => {
+): Promise<{url: string, thumbnailUrl?: string}> => {
   try {
     // Create a unique filename
     const uniqueFilename = generateUniqueFilename(
@@ -36,8 +36,19 @@ export const uploadFileToBunny = async (
       'Content-Type': file instanceof File ? file.type : "application/octet-stream",
     });
 
-    // Return the URL of the uploaded file
-    return `https://${process.env.BUNNY_STORAGE_NAME}.b-cdn.net${uploadPath}`;
+    // Generate a URL for the uploaded file
+    const url = `https://${process.env.BUNNY_STORAGE_NAME}.b-cdn.net${uploadPath}`;
+
+    // For video files, generate a thumbnail URL (this would be more complex in a real app)
+    let thumbnailUrl: string | undefined = undefined;
+    if (file instanceof File && file.type.startsWith('video/')) {
+      // In a real implementation, you would generate a thumbnail using a video processing service
+      // For now, we'll just use a placeholder
+      thumbnailUrl = `https://${process.env.BUNNY_STORAGE_NAME}.b-cdn.net${uploadPath}?thumbnail=true`;
+    }
+
+    // Return the URL of the uploaded file and thumbnail if available
+    return { url, thumbnailUrl };
   } catch (error) {
     console.error("Error uploading file to Bunny.net:", error);
     throw new Error("Failed to upload file");

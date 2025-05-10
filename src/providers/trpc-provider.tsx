@@ -21,6 +21,18 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
     defaultOptions: {
       queries: {
         staleTime: 5 * 1000,
+        retry: (failureCount, error) => {
+          // Don't retry on 400 errors (client errors)
+          if (
+            error instanceof Error &&
+            'status' in (error as any) &&
+            (error as any).status === 400
+          ) {
+            return false;
+          }
+          // Otherwise retry up to 3 times
+          return failureCount < 3;
+        },
       },
     },
   }));

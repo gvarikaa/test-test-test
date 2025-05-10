@@ -8,6 +8,9 @@ import { aiRouter } from './routers/ai';
 import { testRouter } from './routers/test';
 import { searchRouter } from './routers/search';
 import { groupRouter } from './routers/group';
+import { reelRouter } from './routers/reel';
+import { storyRouter } from './routers/story';
+import { eventRouter } from './routers/event';
 
 export const appRouter = router({
   user: userRouter,
@@ -19,6 +22,9 @@ export const appRouter = router({
   test: testRouter,
   search: searchRouter,
   group: groupRouter,
+  reel: reelRouter,
+  story: storyRouter,
+  event: eventRouter,
 });
 
 export type AppRouter = typeof appRouter;

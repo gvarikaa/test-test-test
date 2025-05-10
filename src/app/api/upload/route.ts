@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { MediaType } from "@prisma/client";
 import { uploadFileToBunny } from "@/lib/bunny";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth-options";
 
 // Maximum file size (10MB)
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -70,15 +70,7 @@ export async function POST(request: NextRequest) {
     const folderPath = `/${mediaType.toLowerCase()}s/${session.user.id}`;
     
     // Upload the file to Bunny.net
-    const url = await uploadFileToBunny(file, folderPath);
-    
-    // Generate a thumbnail if it's a video (this would be a more complex process in a real app)
-    const thumbnailUrl: string | undefined = undefined;
-
-    if (mediaType === "VIDEO") {
-      // For a real implementation, you might use ffmpeg or a video processing service
-      // For now, we'll just return undefined for the thumbnail
-    }
+    const { url, thumbnailUrl } = await uploadFileToBunny(file, folderPath);
     
     // Return the URL of the uploaded file
     return NextResponse.json({

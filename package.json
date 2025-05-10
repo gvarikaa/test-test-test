@@ -14,7 +14,7 @@
     "db:studio": "npx prisma studio"
   },
   "prisma": {
-    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+    "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.9.0",
@@ -30,6 +30,7 @@
     "axios": "^1.9.0",
     "bcrypt": "^5.1.1",
     "bunny-storage": "^1.1.1",
+    "cron-parser": "^5.1.1",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.509.0",
     "next": "15.3.2",
@@ -42,6 +43,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.56.3",
+    "react-intersection-observer": "^9.16.0",
     "superjson": "^2.2.2",
     "tailwindcss": "^4.1.6",
     "web-push": "^3.6.5",

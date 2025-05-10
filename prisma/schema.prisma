@@ -77,6 +77,9 @@ model User {
   reels          Reel[]
   reelLikes      ReelLike[]
   reelComments   ReelComment[]
+  reelShares     ReelShare[]
+  savedReels     SavedReel[]
+  reelViews      ReelView[]
 
   // Pages
   ownedPages     Page[]          @relation("PageOwner")
@@ -103,8 +106,11 @@ model User {
   groupReportedContent   GroupReport[]       @relation("ReportedUser")
 
   // Events
-  createdEvents  Event[]
-  eventParticipations EventParticipation[]
+  createdEvents        Event[]
+  eventParticipations  EventParticipation[]
+  eventComments        EventComment[]
+  eventUpdates         EventUpdate[]
+  eventMedia           EventMedia[]
 
   // AI related
   aiTokenLimit         AITokenLimit?
@@ -195,6 +201,15 @@ model Media {
 
   groupPostId String?
   groupPost   GroupPost? @relation(fields: [groupPostId], references: [id], onDelete: Cascade)
+
+  // Media metadata
+  width       Int?
+  height      Int?
+  duration    Float?     // Duration in seconds for video/audio
+  fileSize    Int?       // Size in bytes
+  codec       String?    // For video: h264, h265, etc.
+  bitrate     Int?       // For video/audio: bitrate in kbps
+  resolution  String?    // E.g., "1080p", "4K"
 
   @@index([postId])
   @@index([commentId])
@@ -425,6 +440,7 @@ model Topic {
   
   userInterests UserInterest[]
   postHashtags  PostHashtag[]
+  reelHashtags  ReelHashtag[]
 }
 
 model UserInterest {
@@ -499,21 +515,51 @@ model StoryView {
   @@index([viewerId])
 }
 
+// Enhanced Reel model and related models
 model Reel {
-  id          String       @id @default(cuid())
-  caption     String?
-  createdAt   DateTime     @default(now())
+  id             String       @id @default(cuid())
+  caption        String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
   
-  userId      String
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Enhanced fields
+  duration       Float?       // Duration in seconds
+  viewCount      Int          @default(0)
+  likeCount      Int          @default(0)
+  commentCount   Int          @default(0)
+  shareCount     Int          @default(0)
+  visibility     Visibility   @default(PUBLIC)
+  thumbnailUrl   String?
+  aspectRatio    String?      // e.g., "9:16", "4:3"
+  processingStatus String     @default("COMPLETED") // "PROCESSING", "COMPLETED", "FAILED"
+  isOriginalAudio Boolean     @default(true)
+  isPublished    Boolean      @default(true)
+
+  // User who created the reel
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  media       Media[]
-  likes       ReelLike[]
-  comments    ReelComment[]
+  // Related content
+  media          Media[]
+  likes          ReelLike[]
+  comments       ReelComment[]
+  shares         ReelShare[]
+  views          ReelView[]
+  savedBy        SavedReel[]
   
-  aiAnalysis  String?      @db.Text
+  // Enhanced relationships
+  hashtags       ReelHashtag[]
+  audio          ReelAudio?
+  categories     ReelCategory[]
+  effects        ReelEffect[]
+  
+  // AI analysis
+  aiAnalysis     String?      @db.Text
 
   @@index([userId])
+  @@index([viewCount])
+  @@index([createdAt])
+  @@index([likeCount])
 }
 
 model ReelLike {
@@ -535,14 +581,160 @@ model ReelComment {
   id        String   @id @default(cuid())
   content   String
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  likeCount Int      @default(0)
   
   reelId    String
   reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
   
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Support for comment replies
+  parentId  String?
+  parent    ReelComment? @relation("ReelCommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies   ReelComment[] @relation("ReelCommentReplies")
 
   @@index([reelId])
+  @@index([userId])
+  @@index([parentId])
+}
+
+// New models for the enhanced reels system
+
+model ReelView {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  watchDuration Float?   // How many seconds the user watched
+  completionRate Float?  // Percentage of the reel watched (0-1)
+  
+  reelId        String
+  reel          Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Additional tracking data
+  deviceInfo    String?
+  location      String?
+
+  @@index([reelId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model ReelShare {
+  id        String      @id @default(cuid())
+  createdAt DateTime    @default(now())
+  platform  SharePlatform // Where the reel was shared
+  
+  reelId    String
+  reel      Reel        @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([reelId])
+  @@index([userId])
+}
+
+model SavedReel {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  reelId    String
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  
+  // For collections/playlists
+  playlistId String?
+  playlist   ReelPlaylist? @relation(fields: [playlistId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, reelId])
+  @@index([userId])
+  @@index([reelId])
+  @@index([playlistId])
+}
+
+model ReelHashtag {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  
+  reelId    String
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  
+  topicId   String
+  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([reelId, topicId])
+  @@index([reelId])
+  @@index([topicId])
+}
+
+model ReelAudio {
+  id              String   @id @default(cuid())
+  title           String
+  artistName      String?
+  duration        Float    // Duration in seconds
+  audioUrl        String
+  waveformUrl     String?
+  isOriginal      Boolean  @default(false)
+  useCount        Int      @default(0)
+  createdAt       DateTime @default(now())
+  
+  // Original reel (if this is original audio)
+  reelId          String?  @unique
+  reel            Reel?    @relation(fields: [reelId], references: [id], onDelete: SetNull)
+  
+  // For music licensing and attribution
+  licenseInfo     String?
+  attribution     String?
+
+  @@index([title])
+  @@index([useCount])
+}
+
+model ReelCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  iconUrl   String?
+  createdAt DateTime @default(now())
+  
+  reels     Reel[]
+
+  @@index([name])
+}
+
+model ReelEffect {
+  id          String   @id @default(cuid())
+  name        String
+  type        EffectType
+  description String?
+  iconUrl     String?
+  settings    Json?    // Configuration for the effect
+  createdAt   DateTime @default(now())
+  
+  reels       Reel[]
+
+  @@index([name])
+  @@index([type])
+}
+
+model ReelPlaylist {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isPrivate   Boolean  @default(false)
+  coverImage  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  userId      String
+  
+  savedReels  SavedReel[]
+
   @@index([userId])
 }
 
@@ -583,42 +775,146 @@ model PageRole {
 }
 
 model Event {
-  id          String    @id @default(cuid())
-  title       String
-  description String?   @db.Text
-  location    String?
-  startsAt    DateTime
-  endsAt      DateTime?
-  coverImage  String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
-  pageId      String?
-  page        Page?     @relation(fields: [pageId], references: [id], onDelete: SetNull)
-  
-  creatorId   String
-  creator     User      @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-  
-  participants EventParticipation[]
+  id                String    @id @default(cuid())
+  title             String
+  description       String?   @db.Text
+  location          String?
+  isOnline          Boolean   @default(false)
+  onlineUrl         String?
+  startsAt          DateTime
+  endsAt            DateTime?
+  coverImage        String?
+  maxParticipants   Int?
+  isPrivate         Boolean   @default(false)
+  isRecurring       Boolean   @default(false)
+  recurrencePattern String?   // RRULE format
+  recurrenceEndDate DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  pageId            String?
+  page              Page?     @relation(fields: [pageId], references: [id], onDelete: SetNull)
+
+  creatorId         String
+  creator           User      @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  participants      EventParticipation[]
+  comments          EventComment[]
+  updates           EventUpdate[]
+  media             EventMedia[]
+  eventTags         EventTagRelation[]
+
+  categoryId        String?
+  category          EventCategory? @relation(fields: [categoryId], references: [id])
 
   @@index([pageId])
   @@index([creatorId])
+  @@index([categoryId])
+  @@index([startsAt])
+  @@index([isPrivate])
 }
 
 model EventParticipation {
-  id        String           @id @default(cuid())
-  status    ParticipationStatus @default(GOING)
-  createdAt DateTime         @default(now())
-  
+  id        String               @id @default(cuid())
+  status    ParticipationStatus  @default(GOING)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
   eventId   String
-  event     Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  
+  event     Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
   userId    String
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // For waitlist functionality
+  isWaitlisted Boolean           @default(false)
+  waitlistPosition Int?
 
   @@unique([eventId, userId])
   @@index([eventId])
   @@index([userId])
+  @@index([status])
+}
+
+model EventComment {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([userId])
+}
+
+model EventUpdate {
+  id          String   @id @default(cuid())
+  content     String   @db.Text
+  isImportant Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([userId])
+}
+
+model EventMedia {
+  id          String     @id @default(cuid())
+  url         String
+  type        MediaType
+  createdAt   DateTime   @default(now())
+
+  eventId     String
+  event       Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([userId])
+}
+
+model EventCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  color       String?
+  icon        String?
+  createdAt   DateTime @default(now())
+
+  events      Event[]
+}
+
+model EventTag {
+  id        String            @id @default(cuid())
+  name      String            @unique
+  createdAt DateTime          @default(now())
+
+  events    EventTagRelation[]
+}
+
+model EventTagRelation {
+  id        String    @id @default(cuid())
+
+  eventId   String
+  event     Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  tagId     String
+  tag       EventTag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, tagId])
+  @@index([eventId])
+  @@index([tagId])
 }
 
 // Health profile for Better Me section
@@ -1074,6 +1370,12 @@ enum NotificationType {
   // System notifications
   SECURITY_ALERT
   ACCOUNT_UPDATE
+  
+  // Reel-related notifications
+  REEL_LIKE
+  REEL_COMMENT
+  REEL_SHARE
+  REEL_TRENDING
 }
 
 enum Role {
@@ -1088,6 +1390,31 @@ enum ParticipationStatus {
   MAYBE
   INVITED
   DECLINED
+}
+
+// New enums for the enhanced reels system
+enum SharePlatform {
+  INTERNAL  // Within the app
+  FACEBOOK
+  TWITTER
+  INSTAGRAM
+  WHATSAPP
+  TELEGRAM
+  EMAIL
+  LINK
+  OTHER
+}
+
+enum EffectType {
+  FILTER
+  TRANSITION
+  STICKER
+  TEXT
+  AUDIO
+  AR
+  BACKGROUND
+  SPEED
+  OTHER
 }
 
 //

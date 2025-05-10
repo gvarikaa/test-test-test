@@ -1,5 +1,7 @@
-import { PrismaClient, Visibility } from '@prisma/client';
+import { PrismaClient, Visibility, MediaType } from '@prisma/client';
 import { hash } from 'bcrypt';
+import { seedReelData } from './seeds/reels.js';
+import { seedEvents } from './seeds/events';
 
 const prisma = new PrismaClient();
 
@@ -154,107 +156,252 @@ async function main() {
   });
 
   // Create a follow relationship
-  await prisma.follow.create({
-    data: {
-      followerId: user1.id,
-      followingId: user2.id,
-    },
-  });
+  try {
+    await prisma.follow.create({
+      data: {
+        followerId: user1.id,
+        followingId: user2.id,
+      },
+    });
+  } catch (error) {
+    console.log('Follow relationship already exists, skipping...');
+  }
 
   // Create a friendship
-  await prisma.friendship.create({
-    data: {
-      userId: user1.id,
-      friendId: user2.id,
-      status: 'ACCEPTED',
-    },
-  });
+  try {
+    await prisma.friendship.create({
+      data: {
+        userId: user1.id,
+        friendId: user2.id,
+        status: 'ACCEPTED',
+      },
+    });
+  } catch (error) {
+    console.log('Friendship already exists, skipping...');
+  }
 
   // Create health profiles for Better Me section
-  await prisma.healthProfile.create({
-    data: {
-      userId: user1.id,
-      age: 32,
-      weight: 78.5,
-      height: 180,
-      gender: 'male',
-      activityLevel: 'moderate',
-      goals: 'Weight loss, muscle gain',
-      dietaryRestrictions: 'None',
-    },
-  });
+  try {
+    await prisma.healthProfile.upsert({
+      where: { userId: user1.id },
+      update: {},
+      create: {
+        userId: user1.id,
+        age: 32,
+        weight: 78.5,
+        height: 180,
+        gender: 'male',
+        activityLevel: 'moderate',
+        goals: 'Weight loss, muscle gain',
+        dietaryRestrictions: 'None',
+      },
+    });
+  } catch (error) {
+    console.log('Health profile for user1 already exists, skipping...');
+  }
 
-  await prisma.healthProfile.create({
-    data: {
-      userId: user2.id,
-      age: 28,
-      weight: 65,
-      height: 165,
-      gender: 'female',
-      activityLevel: 'high',
-      goals: 'Maintain fitness, improve flexibility',
-      dietaryRestrictions: 'Vegetarian',
-    },
-  });
+  try {
+    await prisma.healthProfile.upsert({
+      where: { userId: user2.id },
+      update: {},
+      create: {
+        userId: user2.id,
+        age: 28,
+        weight: 65,
+        height: 165,
+        gender: 'female',
+        activityLevel: 'high',
+        goals: 'Maintain fitness, improve flexibility',
+        dietaryRestrictions: 'Vegetarian',
+      },
+    });
+  } catch (error) {
+    console.log('Health profile for user2 already exists, skipping...');
+  }
 
   // Create a chat between users
-  const chat = await prisma.chat.create({
-    data: {
-      isGroup: false,
-      participants: {
-        create: [
+  let chat;
+  try {
+    const existingChat = await prisma.chat.findFirst({
+      where: {
+        isGroup: false,
+        participants: {
+          every: {
+            userId: {
+              in: [user1.id, user2.id],
+            },
+          },
+        },
+      },
+    });
+
+    if (existingChat) {
+      console.log('Chat already exists, skipping creation...');
+      chat = existingChat;
+    } else {
+      chat = await prisma.chat.create({
+        data: {
+          isGroup: false,
+          participants: {
+            create: [
+              {
+                userId: user1.id,
+                role: 'MEMBER',
+              },
+              {
+                userId: user2.id,
+                role: 'MEMBER',
+              },
+            ],
+          },
+        },
+      });
+    }
+  } catch (error) {
+    console.log('Error creating chat:', error);
+    // Create a new chat anyway
+    chat = await prisma.chat.create({
+      data: {
+        isGroup: false,
+      },
+    });
+
+    // Then add participants
+    try {
+      await prisma.chatParticipant.createMany({
+        data: [
           {
             userId: user1.id,
+            chatId: chat.id,
             role: 'MEMBER',
           },
           {
             userId: user2.id,
+            chatId: chat.id,
             role: 'MEMBER',
           },
         ],
-      },
-    },
-  });
+        skipDuplicates: true,
+      });
+    } catch (participantError) {
+      console.log('Error adding chat participants:', participantError);
+    }
+  }
 
   // Add some messages to the chat
-  await prisma.message.create({
-    data: {
-      content: 'Hey Sarah, how are you doing?',
-      chatId: chat.id,
-      senderId: user1.id,
-      receiverId: user2.id,
-    },
-  });
+  try {
+    const existingMessages = await prisma.message.findMany({
+      where: {
+        chatId: chat.id,
+      },
+      take: 1,
+    });
 
-  await prisma.message.create({
-    data: {
-      content: 'Hi David! I\'m good, just finished my latest art project.',
-      chatId: chat.id,
-      senderId: user2.id,
-      receiverId: user1.id,
-    },
-  });
+    if (existingMessages.length === 0) {
+      await prisma.message.create({
+        data: {
+          content: 'Hey Sarah, how are you doing?',
+          chatId: chat.id,
+          senderId: user1.id,
+          receiverId: user2.id,
+        },
+      });
+
+      await prisma.message.create({
+        data: {
+          content: 'Hi David! I\'m good, just finished my latest art project.',
+          chatId: chat.id,
+          senderId: user2.id,
+          receiverId: user1.id,
+        },
+      });
+    } else {
+      console.log('Messages already exist, skipping...');
+    }
+  } catch (error) {
+    console.log('Error creating messages:', error);
+  }
 
   // Create AI token limits for users
-  await prisma.aITokenLimit.create({
-    data: {
-      userId: user1.id,
-      tier: 'FREE',
-      limit: 150,
-      usage: 0,
-      resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    },
-  });
+  try {
+    await prisma.aITokenLimit.upsert({
+      where: { userId: user1.id },
+      update: {
+        resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+      create: {
+        userId: user1.id,
+        tier: 'FREE',
+        limit: 150,
+        usage: 0,
+        resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+  } catch (error) {
+    console.log('AI token limit for user1 already exists, skipping...');
+  }
 
-  await prisma.aITokenLimit.create({
-    data: {
-      userId: user2.id,
-      tier: 'FREE',
-      limit: 150,
-      usage: 0,
-      resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    },
-  });
+  try {
+    await prisma.aITokenLimit.upsert({
+      where: { userId: user2.id },
+      update: {
+        resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+      create: {
+        userId: user2.id,
+        tier: 'FREE',
+        limit: 150,
+        usage: 0,
+        resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+  } catch (error) {
+    console.log('AI token limit for user2 already exists, skipping...');
+  }
+
+  // Add a sample reel for testing
+  try {
+    const existingReel = await prisma.reel.findFirst({
+      where: {
+        userId: user1.id,
+        caption: 'First test reel on DapDip! #TechTok',
+      },
+    });
+
+    if (!existingReel) {
+      await prisma.reel.create({
+        data: {
+          caption: 'First test reel on DapDip! #TechTok',
+          userId: user1.id,
+          visibility: Visibility.PUBLIC,
+          duration: 15.5,
+          media: {
+            create: [
+              {
+                type: MediaType.VIDEO,
+                url: 'https://assets.mixkit.co/videos/preview/mixkit-tree-with-yellow-flowers-1173-large.mp4',
+                thumbnailUrl: 'https://i.imgur.com/1234.jpg',
+                duration: 15.5,
+                width: 1080,
+                height: 1920,
+              },
+            ],
+          },
+        },
+      });
+      console.log('Created sample reel');
+    } else {
+      console.log('Sample reel already exists, skipping...');
+    }
+  } catch (error) {
+    console.log('Error creating sample reel:', error);
+  }
+
+  // Seed reel categories and effects
+  await seedReelData(prisma);
+
+  // Seed event categories
+  await seedEvents(prisma);
 
   console.log('Seed completed successfully!');
 }

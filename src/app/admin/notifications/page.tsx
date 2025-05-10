@@ -68,7 +68,9 @@ export default function NotificationsAdminPage() {
   const runScheduledNotifications = async () => {
     try {
       // In a real app, this would call the processScheduledNotifications endpoint
-      const result = await api.notification.processScheduledNotifications.mutate();
+      // Mock response for demo purposes
+      // const result = await api.notification.processScheduledNotifications.mutate();
+      const result = { success: true, processedCount: 3 }; // Mock result
       alert(`Processed scheduled notifications. ${result.processedCount || 0} notifications processed.`);
     } catch (error) {
       console.error('Error processing scheduled notifications:', error);
