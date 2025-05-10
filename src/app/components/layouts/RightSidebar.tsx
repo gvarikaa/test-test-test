@@ -55,23 +55,14 @@ export default function RightSidebar() {
     }
   ];
 
-  // აქტიური ჩატის ფანჯრები
-  const activeChats = [
-    {
-      id: '1',
-      name: 'John Doe',
-      image: 'https://ui-avatars.com/api/?name=John+Doe&background=FF5722&color=fff',
-      online: true,
-      minimized: false
-    },
-    {
-      id: '4',
-      name: 'Emily Brown',
-      image: 'https://ui-avatars.com/api/?name=Emily+Brown&background=9C27B0&color=fff',
-      online: true,
-      minimized: true
-    }
-  ];
+  // აქტიური ჩატის ფანჯრები - თავიდან ცარიელი (მხოლოდ მომხმარებლის ქმედებაზე გაიხსნება)
+  const activeChats: {
+    id: string;
+    name: string;
+    image: string;
+    online: boolean;
+    minimized: boolean;
+  }[] = [];
 
   return (
     <aside className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-[360px] overflow-y-auto border-l border-border-color bg-sidebar-bg px-2 py-3 lg:block">

@@ -12,7 +12,7 @@ export default function StoryStrip() {
         name: 'Your Story',
         image: 'https://ui-avatars.com/api/?name=Test+User&background=4CAF50&color=fff'
       },
-      image: 'https://source.unsplash.com/random/200x350/?nature'
+      image: 'https://picsum.photos/200/350?random=5'
     },
     {
       id: '2',
@@ -21,7 +21,7 @@ export default function StoryStrip() {
         name: 'John Doe',
         image: 'https://ui-avatars.com/api/?name=John+Doe&background=FF5722&color=fff'
       },
-      image: 'https://source.unsplash.com/random/200x350/?city'
+      image: 'https://picsum.photos/200/350?random=6'
     },
     {
       id: '3',
@@ -30,7 +30,7 @@ export default function StoryStrip() {
         name: 'Sarah Williams',
         image: 'https://ui-avatars.com/api/?name=Sarah+Williams&background=E91E63&color=fff'
       },
-      image: 'https://source.unsplash.com/random/200x350/?beach'
+      image: 'https://picsum.photos/200/350?random=7'
     },
     {
       id: '4',
@@ -39,7 +39,7 @@ export default function StoryStrip() {
         name: 'David Johnson',
         image: 'https://ui-avatars.com/api/?name=David+Johnson&background=4CAF50&color=fff'
       },
-      image: 'https://source.unsplash.com/random/200x350/?mountain'
+      image: 'https://picsum.photos/200/350?random=8'
     },
     {
       id: '5',
@@ -48,7 +48,7 @@ export default function StoryStrip() {
         name: 'Emily Brown',
         image: 'https://ui-avatars.com/api/?name=Emily+Brown&background=9C27B0&color=fff'
       },
-      image: 'https://source.unsplash.com/random/200x350/?sunset'
+      image: 'https://picsum.photos/200/350?random=9'
     },
     {
       id: '6',
@@ -57,7 +57,7 @@ export default function StoryStrip() {
         name: 'Michael Wilson',
         image: 'https://ui-avatars.com/api/?name=Michael+Wilson&background=3F51B5&color=fff'
       },
-      image: 'https://source.unsplash.com/random/200x350/?forest'
+      image: 'https://picsum.photos/200/350?random=10'
     }
   ]);
 
@@ -67,7 +67,7 @@ export default function StoryStrip() {
       <div className="story-item flex min-w-28 flex-col rounded-xl bg-card-bg shadow-sm">
         <div className="relative h-36 overflow-hidden rounded-t-xl">
           <Image 
-            src="https://source.unsplash.com/random/200x350/?hiking"
+            src="https://picsum.photos/200/350?random=11"
             alt="Create Story" 
             width={112}
             height={144}

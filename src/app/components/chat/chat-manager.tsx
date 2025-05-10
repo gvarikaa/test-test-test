@@ -21,6 +21,7 @@ type Chat = {
 };
 
 export function ChatManager() {
+  // We set initialActiveChats to empty to avoid showing chat on first load
   const [activeChats, setActiveChats] = useState<Chat[]>([]);
   const [minimizedChats, setMinimizedChats] = useState<string[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<Record<string, boolean>>({});
@@ -95,21 +96,11 @@ export function ChatManager() {
   // Update active chats when chat data changes
   useEffect(() => {
     if (chatData?.chats) {
-      // Convert chatData to the format we need
-      const chats = chatData.chats.map((chat) => ({
-        id: chat.id,
-        otherUser: chat.participants.find(
-          (p: { userId: string }) => p.userId !== session?.user?.id
-        )?.user || { id: "", name: "User", image: null },
-        unreadCount: chat.unreadCount,
-      }));
-
-      // Only update if there are actually changes
-      if (JSON.stringify(chats) !== JSON.stringify(activeChats)) {
-        setActiveChats(chats);
-      }
+      // Convert chatData to the format we need - but don't auto display them
+      // Just save the data for when user clicks the chat button
+      // We don't populate activeChats automatically on initial load
     }
-  }, [chatData, session?.user?.id, activeChats]);
+  }, [chatData, session?.user?.id]);
 
   // Functions for closing, minimizing, and maximizing chats
 
@@ -191,11 +182,23 @@ export function ChatManager() {
       {/* Chat button */}
       <div className="fixed bottom-4 right-4 z-10">
         <button
-          className="bg-primary text-primary-foreground p-3 rounded-full shadow-lg hover:bg-primary/90"
+          className="bg-accent-blue text-text-primary p-3 rounded-full shadow-lg hover:bg-accent-blue-hover"
           onClick={() => {
-            // This would typically open a contacts list to choose who to chat with
-            // For now, we'll just show a placeholder message
-            alert("Chat functionality is here, but user selection isn't implemented in this demo.");
+            // For demo purposes, we'll populate one chat when the button is clicked
+            if (chatData?.chats?.length > 0 && activeChats.length === 0) {
+              const firstChat = chatData.chats[0];
+              const chat = {
+                id: firstChat.id,
+                otherUser: firstChat.participants.find(
+                  (p: { userId: string }) => p.userId !== session?.user?.id
+                )?.user || { id: "", name: "John Doe", image: "https://ui-avatars.com/api/?name=John+Doe&background=FF5722&color=fff" },
+                unreadCount: 0,
+              };
+              setActiveChats([chat]);
+            } else {
+              // Show a placeholder message if no chats available
+              alert("Chat functionality is here, but user selection isn't implemented in this demo.");
+            }
           }}
         >
           <MessageSquare className="h-6 w-6" />

@@ -32,7 +32,7 @@ export default function Home() {
       },
       content: 'Just started using the new DapDip platform! Excited to connect with everyone here. #technology',
       images: [
-        'https://source.unsplash.com/random/800x600/?technology',
+        'https://picsum.photos/800/600?random=1',
       ],
       createdAt: '2025-05-08T12:00:00Z',
       likes: 15,
@@ -48,7 +48,7 @@ export default function Home() {
       },
       content: 'Just finished my latest digital art piece. What do you think? #art',
       images: [
-        'https://source.unsplash.com/random/800x600/?digitalart',
+        'https://picsum.photos/800/600?random=2',
       ],
       createdAt: '2025-05-08T10:30:00Z',
       likes: 42,
@@ -77,8 +77,8 @@ export default function Home() {
       },
       content: 'Check out these amazing photos from my trip to Japan last month! The cherry blossoms were stunning. 🌸 #travel #japan',
       images: [
-        'https://source.unsplash.com/random/800x600/?japan,cherry-blossom',
-        'https://source.unsplash.com/random/800x600/?japan,temple',
+        'https://picsum.photos/800/600?random=3',
+        'https://picsum.photos/800/600?random=4',
       ],
       createdAt: '2025-05-07T22:45:00Z',
       likes: 67,

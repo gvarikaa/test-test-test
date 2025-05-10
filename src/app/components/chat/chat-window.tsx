@@ -209,8 +209,8 @@ export function ChatWindow({
 
   if (isMinimized) {
     return (
-      <div className="fixed bottom-0 right-4 w-72 bg-background border border-border rounded-t-lg shadow-lg">
-        <div className="p-3 border-b border-border flex justify-between items-center cursor-pointer" onClick={onMaximize}>
+      <div className="fixed bottom-0 right-4 w-72 bg-header-bg border border-border-color rounded-t-lg shadow-lg">
+        <div className="p-3 border-b border-border-color flex justify-between items-center cursor-pointer bg-header-bg" onClick={onMaximize}>
           <div className="flex items-center">
             <div className="relative">
               <Image
@@ -221,10 +221,10 @@ export function ChatWindow({
                 className="h-8 w-8 rounded-full object-cover"
               />
               {otherUser.online && (
-                <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-green-500"></span>
+                <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-accent-green"></span>
               )}
             </div>
-            <span className="ml-2 font-medium truncate">{otherUser.name || "User"}</span>
+            <span className="ml-2 font-medium truncate text-text-primary">{otherUser.name || "User"}</span>
           </div>
           <div className="flex items-center">
             <button
@@ -232,7 +232,7 @@ export function ChatWindow({
                 e.stopPropagation();
                 onMaximize();
               }}
-              className="p-1 text-muted-foreground hover:text-foreground"
+              className="p-1 text-text-secondary hover:text-text-primary"
             >
               <Maximize className="h-4 w-4" />
             </button>
@@ -241,7 +241,7 @@ export function ChatWindow({
                 e.stopPropagation();
                 onClose();
               }}
-              className="p-1 text-muted-foreground hover:text-foreground"
+              className="p-1 text-text-secondary hover:text-text-primary"
             >
               <X className="h-4 w-4" />
             </button>
@@ -252,9 +252,9 @@ export function ChatWindow({
   }
 
   return (
-    <div className="fixed bottom-0 right-4 w-80 h-96 bg-background border border-border rounded-t-lg shadow-lg flex flex-col z-10">
+    <div className="fixed bottom-0 right-4 w-80 h-96 bg-card-bg border border-border-color rounded-t-lg shadow-lg flex flex-col z-10">
       {/* Chat header */}
-      <div className="p-3 border-b border-border flex justify-between items-center">
+      <div className="p-3 border-b border-border-color flex justify-between items-center bg-header-bg">
         <div className="flex items-center">
           <div className="relative">
             <Image
@@ -265,21 +265,21 @@ export function ChatWindow({
               className="h-8 w-8 rounded-full object-cover"
             />
             {otherUser.online && (
-              <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-green-500"></span>
+              <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-accent-green"></span>
             )}
           </div>
-          <span className="ml-2 font-medium truncate">{otherUser.name || "User"}</span>
+          <span className="ml-2 font-medium truncate text-text-primary">{otherUser.name || "User"}</span>
         </div>
         <div className="flex items-center">
           <button
             onClick={onMinimize}
-            className="p-1 text-muted-foreground hover:text-foreground"
+            className="p-1 text-text-secondary hover:text-text-primary"
           >
             <Minimize className="h-4 w-4" />
           </button>
           <button
             onClick={onClose}
-            className="p-1 text-muted-foreground hover:text-foreground"
+            className="p-1 text-text-secondary hover:text-text-primary"
           >
             <X className="h-4 w-4" />
           </button>
@@ -287,13 +287,13 @@ export function ChatWindow({
       </div>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-4">
+      <div className="flex-1 overflow-y-auto p-3 space-y-4 bg-dark-bg">
         {isLoading || messagesLoading ? (
           <div className="flex items-center justify-center h-full">
-            <div className="animate-pulse">Loading messages...</div>
+            <div className="animate-pulse text-text-secondary">Loading messages...</div>
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-muted-foreground">
+          <div className="flex items-center justify-center h-full text-text-secondary">
             No messages yet
           </div>
         ) : (
@@ -306,14 +306,15 @@ export function ChatWindow({
                 className={`flex ${isCurrentUser ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[80%] rounded-lg p-3 ${
+                  className={`max-w-[80%] rounded-lg p-3 shadow-md ${
                     isCurrentUser
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
+                      ? "bg-accent-blue text-text-primary"
+                      : "bg-card-bg text-text-primary"
                   }`}
+                  style={{ backdropFilter: "none", backgroundColor: isCurrentUser ? "var(--accent-blue)" : "var(--card-bg)" }}
                 >
                   {msg.content && <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
-                  
+
                   {msg.media.length > 0 && (
                     <div className="mt-2">
                       {msg.media.map((media) => (
@@ -327,10 +328,10 @@ export function ChatWindow({
                       ))}
                     </div>
                   )}
-                  
+
                   <p
                     className={`text-xs mt-1 ${
-                      isCurrentUser ? "text-primary-foreground/70" : "text-muted-foreground"
+                      isCurrentUser ? "text-text-primary/70" : "text-text-secondary"
                     }`}
                   >
                     {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true })}
@@ -343,22 +344,22 @@ export function ChatWindow({
         
         {isTyping && (
           <div className="flex justify-start">
-            <div className="bg-muted rounded-lg p-3">
+            <div className="bg-card-bg rounded-lg p-3 shadow-md" style={{ backdropFilter: "none", backgroundColor: "var(--card-bg)" }}>
               <div className="flex space-x-1">
-                <div className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce"></div>
-                <div className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce delay-75"></div>
-                <div className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce delay-150"></div>
+                <div className="h-2 w-2 rounded-full bg-text-secondary animate-bounce"></div>
+                <div className="h-2 w-2 rounded-full bg-text-secondary animate-bounce delay-75"></div>
+                <div className="h-2 w-2 rounded-full bg-text-secondary animate-bounce delay-150"></div>
               </div>
             </div>
           </div>
         )}
-        
+
         <div ref={messagesEndRef} />
       </div>
 
       {/* Upload form */}
       {showUploadForm && (
-        <div className="p-3 border-t border-border">
+        <div className="p-3 border-t border-border-color bg-card-bg">
           <UploadForm
             onUploadComplete={handleUploadComplete}
             allowedTypes={["IMAGE", "VIDEO", "AUDIO", "DOCUMENT"]}
@@ -366,7 +367,7 @@ export function ChatWindow({
           <button
             type="button"
             onClick={() => setShowUploadForm(false)}
-            className="mt-2 w-full py-1 px-3 bg-muted text-muted-foreground rounded-md hover:bg-muted/80 text-sm"
+            className="mt-2 w-full py-1 px-3 bg-hover-bg text-text-secondary rounded-md hover:bg-hover-bg/90 text-sm"
           >
             Cancel
           </button>
@@ -375,12 +376,12 @@ export function ChatWindow({
 
       {/* Input area */}
       {!showUploadForm && (
-        <div className="p-3 border-t border-border">
+        <div className="p-3 border-t border-border-color bg-card-bg">
           <div className="flex items-end">
             <button
               type="button"
               onClick={() => setShowUploadForm(true)}
-              className="p-2 text-muted-foreground hover:text-foreground"
+              className="p-2 text-text-secondary hover:text-text-primary"
             >
               <Paperclip className="h-5 w-5" />
             </button>
@@ -389,14 +390,14 @@ export function ChatWindow({
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="flex-1 p-2 bg-transparent border-none focus:outline-none resize-none text-sm"
+              className="flex-1 p-2 bg-input-bg border-none focus:outline-none resize-none text-sm rounded-md text-text-primary"
               rows={1}
             />
             <button
               type="button"
               onClick={handleSendMessage}
               disabled={!message.trim() && !showUploadForm}
-              className="p-2 text-muted-foreground hover:text-primary disabled:opacity-50"
+              className="p-2 text-text-secondary hover:text-accent-blue disabled:opacity-50"
             >
               <Send className="h-5 w-5" />
             </button>
