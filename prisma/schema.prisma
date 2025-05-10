@@ -55,6 +55,10 @@ model User {
   // Notifications
   notifications  Notification[]  @relation("NotificationRecipient")
   notificationsSent Notification[] @relation("NotificationSender")
+  notificationPreferences NotificationPreference?
+  notificationCategoryPreferences NotificationCategoryPreference[]
+  notificationGroupPreferences NotificationGroupPreference[]
+  pushDevices    PushDevice[]
 
   // Interests and topics
   interests      UserInterest[]
@@ -347,26 +351,70 @@ model Message {
 }
 
 model Notification {
-  id          String           @id @default(cuid())
-  type        NotificationType
-  content     String?
-  isRead      Boolean          @default(false)
-  createdAt   DateTime         @default(now())
-  
-  recipientId String
-  recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
-  
-  senderId    String?
-  sender      User?            @relation("NotificationSender", fields: [senderId], references: [id])
-  
-  postId      String?
-  commentId   String?
-  messageId   String?
-  
-  url         String?
+  id            String           @id @default(cuid())
+  type          NotificationType
+  content       String?
+  isRead        Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+  expiresAt     DateTime?
+  priority      NotificationPriority @default(NORMAL)
+  isMuted       Boolean          @default(false)
+  isActionable  Boolean          @default(false)
+  actionLabel   String?
+  actionUrl     String?
+  imageUrl      String?
+
+  // Recipient info
+  recipientId   String
+  recipient     User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  // Sender info
+  senderId      String?
+  sender        User?            @relation("NotificationSender", fields: [senderId], references: [id])
+
+  // Related content references
+  postId        String?
+  commentId     String?
+  messageId     String?
+
+  // Group-related references
+  groupId       String?
+  group         Group?           @relation(fields: [groupId], references: [id])
+  groupPostId   String?
+  groupCommentId String?
+  groupEventId  String?
+  groupPollId   String?
+  groupFileId   String?
+  groupBadgeId  String?
+
+  // Page-related references
+  pageId        String?
+  page          Page?            @relation(fields: [pageId], references: [id])
+
+  // Health-related references
+  healthProfileId String?
+
+  // General notification URL
+  url           String?
+
+  // Delivery status for push notifications
+  deliveryStatus NotificationDeliveryStatus? @default(PENDING)
+  deliveredAt   DateTime?
+  readAt        DateTime?
+
+  // Metadata
+  metadata      Json?
+
+  // Preferences override for this specific notification
+  overrideUserPreferences Boolean @default(false)
 
   @@index([recipientId])
   @@index([senderId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([isRead])
+  @@index([groupId])
+  @@index([pageId])
 }
 
 model Topic {
@@ -510,9 +558,10 @@ model Page {
   
   ownerId     String
   owner       User      @relation("PageOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  
-  roles       PageRole[]
-  events      Event[]
+
+  roles         PageRole[]
+  events        Event[]
+  notifications Notification[]
 
   @@index([ownerId])
 }
@@ -738,6 +787,179 @@ model AIHealthRecommendation {
   @@index([healthProfileId])
 }
 
+// Notification preference models
+model NotificationPreference {
+  id                 String   @id @default(cuid())
+  emailEnabled       Boolean  @default(true)
+  pushEnabled        Boolean  @default(true)
+  inAppEnabled       Boolean  @default(true)
+  smsEnabled         Boolean  @default(false)
+  quietHoursEnabled  Boolean  @default(false)
+  quietHoursStart    String?  // Format: HH:MM (24h)
+  quietHoursEnd      String?  // Format: HH:MM (24h)
+  quietHoursDays     String?  // Comma-separated days (MON,TUE,etc)
+  weekendMuteEnabled Boolean  @default(false)
+  digestEnabled      Boolean  @default(false)
+  digestFrequency    String?  @default("DAILY") // DAILY, WEEKLY
+  digestDay          String?  // For weekly digest: MON, TUE, etc.
+  digestTime         String?  // Format: HH:MM (24h)
+  updatedAt          DateTime @updatedAt
+
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model NotificationCategoryPreference {
+  id                 String   @id @default(cuid())
+  category           String   // E.g., "SOCIAL", "GROUP", "SYSTEM", etc.
+  inAppEnabled       Boolean  @default(true)
+  emailEnabled       Boolean  @default(false)
+  pushEnabled        Boolean  @default(true)
+  smsEnabled         Boolean  @default(false)
+  muteAll            Boolean  @default(false)
+  muteUntil          DateTime?
+  priority           NotificationPriority @default(NORMAL)
+  updatedAt          DateTime @updatedAt
+
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+  @@index([userId])
+}
+
+model NotificationGroupPreference {
+  id                 String   @id @default(cuid())
+  inAppEnabled       Boolean  @default(true)
+  emailEnabled       Boolean  @default(false)
+  pushEnabled        Boolean  @default(true)
+  muteAll            Boolean  @default(false)
+  muteUntil          DateTime?
+  postsEnabled       Boolean  @default(true)
+  commentsEnabled    Boolean  @default(true)
+  eventsEnabled      Boolean  @default(true)
+  pollsEnabled       Boolean  @default(true)
+  mentionsEnabled    Boolean  @default(true)
+  announcementsOnly  Boolean  @default(false)
+  updatedAt          DateTime @updatedAt
+
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Which group this preference applies to
+  groupId            String
+
+  @@unique([userId, groupId])
+  @@index([userId])
+  @@index([groupId])
+}
+
+model PushDevice {
+  id                 String   @id @default(cuid())
+  deviceToken        String   @unique
+  platform           String   // "ios", "android", "web"
+  deviceName         String?
+  deviceModel        String?
+  osVersion          String?
+  appVersion         String?
+  isActive           Boolean  @default(true)
+  lastActive         DateTime @default(now())
+  createdAt          DateTime @default(now())
+
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([deviceToken])
+}
+
+model ScheduledNotification {
+  id                String               @id @default(cuid())
+  type              NotificationType
+  content           String?
+  scheduledFor      DateTime
+  recurring         Boolean              @default(false)
+  recurrencePattern String?              // CRON format
+  recurrenceEnd     DateTime?
+  channels          String?              // Comma-separated: IN_APP,EMAIL,PUSH,SMS
+  priority          NotificationPriority @default(NORMAL)
+  status            String               @default("PENDING") // PENDING, SENT, CANCELLED, FAILED
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  // Target user(s)
+  recipientId       String?              // For individual notifications
+  segmentId         String?              // For targeting a segment of users
+  groupId           String?              // For targeting members of a group
+
+  // Related content references
+  entityType        String?              // E.g., "post", "event", etc.
+  entityId          String?              // ID of the related entity
+
+  // Additional data
+  metadata          Json?
+
+  // Tracking information
+  sentCount         Int                  @default(0)
+  openCount         Int                  @default(0)
+  clickCount        Int                  @default(0)
+
+  // Notification template
+  templateId        String?
+  template          NotificationTemplate? @relation(fields: [templateId], references: [id])
+
+  @@index([recipientId])
+  @@index([scheduledFor])
+  @@index([status])
+  @@index([groupId])
+}
+
+model NotificationTemplate {
+  id                String   @id @default(cuid())
+  name              String
+  description       String?
+  type              NotificationType
+  titleTemplate     String?
+  contentTemplate   String
+  actionLabel       String?
+  actionUrlTemplate String?
+  imageUrl          String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Variables used in the template, stored as JSON
+  variables         Json?
+
+  // Notification settings
+  channels          String   // Comma-separated: IN_APP,EMAIL,PUSH,SMS
+  priority          NotificationPriority @default(NORMAL)
+
+  // Related scheduled notifications
+  scheduledNotifications ScheduledNotification[]
+}
+
+model NotificationLog {
+  id                String   @id @default(cuid())
+  notificationId    String
+  userId            String
+  channel           NotificationChannel
+  event             String   // "delivered", "read", "clicked", "dismissed"
+  deviceId          String?  // For push notifications
+  deviceInfo        Json?    // Platform, browser, etc.
+  timestamp         DateTime @default(now())
+  success           Boolean  @default(true)
+  errorMessage      String?
+
+  // Extra data
+  metadata          Json?
+
+  @@index([notificationId])
+  @@index([userId])
+  @@index([channel])
+  @@index([event])
+  @@index([timestamp])
+}
+
 model AIChatInteraction {
   id          String   @id @default(cuid())
   userId      String
@@ -757,6 +979,27 @@ enum Visibility {
   PUBLIC
   FRIENDS
   PRIVATE
+}
+
+// Notification related enums
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  PUSH
+  SMS
 }
 
 enum MediaType {
@@ -788,6 +1031,7 @@ enum ChatRole {
 }
 
 enum NotificationType {
+  // User-related notifications
   FOLLOW
   LIKE
   COMMENT
@@ -795,6 +1039,41 @@ enum NotificationType {
   FRIEND_REQUEST
   MESSAGE
   SYSTEM
+
+  // Group-related notifications
+  GROUP_INVITE
+  GROUP_JOIN_REQUEST
+  GROUP_JOIN_APPROVED
+  GROUP_ROLE_CHANGE
+  GROUP_POST
+  GROUP_COMMENT
+  GROUP_REACTION
+  GROUP_EVENT
+  GROUP_POLL
+  GROUP_ANNOUNCEMENT
+  GROUP_MENTION
+  GROUP_FILE_UPLOAD
+  GROUP_BADGE_AWARDED
+
+  // Page-related notifications
+  PAGE_INVITE
+  PAGE_POST
+  PAGE_EVENT
+
+  // Content notifications
+  POST_TRENDING
+  CONTENT_REMOVED
+
+  // AI-related notifications
+  AI_RECOMMENDATION
+
+  // Health-related notifications
+  HEALTH_REMINDER
+  HEALTH_GOAL_ACHIEVED
+
+  // System notifications
+  SECURITY_ALERT
+  ACCOUNT_UPDATE
 }
 
 enum Role {
@@ -889,6 +1168,7 @@ model Group {
   polls               GroupPoll[]
   badges              GroupBadge[]
   reports             GroupReport[]
+  notifications       Notification[]
 
   // Group settings
   settings            GroupSettings?

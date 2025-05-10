@@ -52,3 +52,34 @@ const enforceUserIsAuthed = t.middleware(({ ctx, next }) => {
 });
 
 export const protectedProcedure = t.procedure.use(enforceUserIsAuthed);
+
+// Middleware to check if the user is an admin
+const enforceUserIsAdmin = t.middleware(async ({ ctx, next }) => {
+  if (!ctx.session || !ctx.session.user) {
+    throw new TRPCError({ code: 'UNAUTHORIZED' });
+  }
+
+  // Check if the user has admin role in the database
+  const user = await ctx.db.user.findUnique({
+    where: { id: ctx.session.user.id },
+    select: { id: true, email: true }
+  });
+
+  // For now, we're using a simplified check - in a real system
+  // this would likely check a role field or admin table
+  const adminEmails = ['admin@dapdip.com', 'moderator@dapdip.com'];
+  const isAdmin = user && user.email && adminEmails.includes(user.email);
+
+  if (!isAdmin) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'User is not an admin' });
+  }
+
+  return next({
+    ctx: {
+      session: { ...ctx.session, user: ctx.session.user },
+      isAdmin: true,
+    },
+  });
+});
+
+export const adminProcedure = t.procedure.use(enforceUserIsAdmin);
