@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,113 +7,82 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// User model
 model User {
-  id             String    @id @default(cuid())
-  name           String?
-  email          String?   @unique
-  emailVerified  DateTime?
-  image          String?
-  hashedPassword String?
-  username       String?   @unique
-  bio            String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  // User profile related fields
-  coverImage  String?
-  location    String?
-  website     String?
-  occupation  String?
-  phoneNumber String?
-  language    String  @default("en")
-  theme       String  @default("system")
-
-  // Authentication
-  accounts Account[]
-  sessions Session[]
-
-  // Content
-  posts      Post[]
-  comments   Comment[]
-  reactions  Reaction[]
-  savedPosts SavedPost[]
-
-  // User relationships
-  followers Follow[]     @relation("FollowingUser")
-  following Follow[]     @relation("FollowerUser")
-  friends   Friendship[] @relation("UserFriends")
-  friendsOf Friendship[] @relation("FriendsOfUser")
-
-  // Messaging
-  sentMessages     Message[] @relation("MessageSender")
-  receivedMessages Message[] @relation("MessageReceiver")
-
-  // Notifications
+  id                              String                           @id @default(cuid())
+  name                            String?
+  email                           String?                          @unique
+  emailVerified                   DateTime?
+  image                           String?
+  hashedPassword                  String?
+  username                        String?                          @unique
+  bio                             String?
+  createdAt                       DateTime                         @default(now())
+  updatedAt                       DateTime                         @updatedAt
+  coverImage                      String?
+  location                        String?
+  website                         String?
+  occupation                      String?
+  phoneNumber                     String?
+  language                        String                           @default("en")
+  theme                           String                           @default("system")
+  aiChatInteractions              AIChatInteraction[]
+  aiContentAnalyses               AIContentAnalysis[]
+  aiHealthRecommendations         AIHealthRecommendation[]
+  aiTokenLimit                    AITokenLimit?
+  accounts                        Account[]
+  chatParticipations              ChatParticipant[]
+  comments                        Comment[]
+  createdEvents                   Event[]
+  eventComments                   EventComment[]
+  eventMedia                      EventMedia[]
+  eventParticipations             EventParticipation[]
+  eventUpdates                    EventUpdate[]
+  following                       Follow[]                         @relation("FollowerUser")
+  followers                       Follow[]                         @relation("FollowingUser")
+  friendsOf                       Friendship[]                     @relation("FriendsOfUser")
+  friends                         Friendship[]                     @relation("UserFriends")
+  createdGroups                   Group[]                          @relation("GroupCreator")
+  groupBadges                     GroupBadge[]
+  groupComments                   GroupComment[]
+  groupDiscussionReplies          GroupDiscussionReply[]           @relation("ReplyCreator")
+  groupDiscussionTopics           GroupDiscussionTopic[]           @relation("TopicCreator")
+  groupEvents                     GroupEvent[]                     @relation("EventCreator")
+  groupEventParticipations        GroupEventParticipation[]
+  groupFileUploads                GroupFile[]                      @relation("FileUploader")
+  sentGroupInvitations            GroupInvitation[]                @relation("InvitingUser")
+  groupInvitations                GroupInvitation[]                @relation("InvitedUser")
+  groupJoinRequests               GroupJoinRequest[]
+  groupMemberships                GroupMember[]
+  groupPolls                      GroupPoll[]                      @relation("PollCreator")
+  groupPollVotes                  GroupPollVote[]
+  groupPosts                      GroupPost[]
+  groupReactions                  GroupReaction[]
+  groupReports                    GroupReport[]                    @relation("ReportCreator")
+  groupReportedContent            GroupReport[]                    @relation("ReportedUser")
+  healthProfile                   HealthProfile?
+  receivedMessages                Message[]                        @relation("MessageReceiver")
+  sentMessages                    Message[]                        @relation("MessageSender")
   notifications                   Notification[]                   @relation("NotificationRecipient")
   notificationsSent               Notification[]                   @relation("NotificationSender")
-  notificationPreferences         NotificationPreference?
   notificationCategoryPreferences NotificationCategoryPreference[]
   notificationGroupPreferences    NotificationGroupPreference[]
+  notificationPreferences         NotificationPreference?
+  ownedPages                      Page[]                           @relation("PageOwner")
+  pageRoles                       PageRole[]
+  posts                           Post[]
   pushDevices                     PushDevice[]
-
-  // Interests and topics
-  interests UserInterest[]
-
-  // Health data for Better Me
-  healthProfile HealthProfile?
-
-  // Chat related
-  chatParticipations ChatParticipant[]
-
-  // Stories
-  stories       Story[]
-  viewedStories StoryView[]
-
-  // Reels
-  reels        Reel[]
-  reelLikes    ReelLike[]
-  reelComments ReelComment[]
-  reelShares   ReelShare[]
-  savedReels   SavedReel[]
-  reelViews    ReelView[]
-
-  // Pages
-  ownedPages Page[]     @relation("PageOwner")
-  pageRoles  PageRole[]
-
-  // Groups
-  createdGroups            Group[]                   @relation("GroupCreator")
-  groupMemberships         GroupMember[]
-  groupInvitations         GroupInvitation[]         @relation("InvitedUser")
-  sentGroupInvitations     GroupInvitation[]         @relation("InvitingUser")
-  groupJoinRequests        GroupJoinRequest[]
-  groupPosts               GroupPost[]
-  groupComments            GroupComment[]
-  groupReactions           GroupReaction[]
-  groupFileUploads         GroupFile[]               @relation("FileUploader")
-  groupDiscussionTopics    GroupDiscussionTopic[]    @relation("TopicCreator")
-  groupDiscussionReplies   GroupDiscussionReply[]    @relation("ReplyCreator")
-  groupEvents              GroupEvent[]              @relation("EventCreator")
-  groupEventParticipations GroupEventParticipation[]
-  groupPolls               GroupPoll[]               @relation("PollCreator")
-  groupPollVotes           GroupPollVote[]
-  groupBadges              GroupBadge[]
-  groupReports             GroupReport[]             @relation("ReportCreator")
-  groupReportedContent     GroupReport[]             @relation("ReportedUser")
-
-  // Events
-  createdEvents       Event[]
-  eventParticipations EventParticipation[]
-  eventComments       EventComment[]
-  eventUpdates        EventUpdate[]
-  eventMedia          EventMedia[]
-
-  // AI related
-  aiTokenLimit            AITokenLimit?
-  aiContentAnalyses       AIContentAnalysis[]
-  aiHealthRecommendations AIHealthRecommendation[]
-  aiChatInteractions      AIChatInteraction[]
+  reactions                       Reaction[]
+  reels                           Reel[]
+  reelComments                    ReelComment[]
+  reelLikes                       ReelLike[]
+  reelShares                      ReelShare[]
+  reelViews                       ReelView[]
+  savedPosts                      SavedPost[]
+  savedReels                      SavedReel[]
+  sessions                        Session[]
+  stories                         Story[]
+  viewedStories                   StoryView[]
+  interests                       UserInterest[]
 }
 
 model Account {
@@ -125,15 +91,14 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -155,61 +120,49 @@ model VerificationToken {
 }
 
 model Post {
-  id         String     @id @default(cuid())
-  content    String     @db.Text
-  published  Boolean    @default(true)
-  visibility Visibility @default(PUBLIC)
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  media     Media[]
-  comments  Comment[]
-  reactions Reaction[]
-  savedBy   SavedPost[]
-
+  id         String        @id @default(cuid())
+  content    String
+  published  Boolean       @default(true)
+  visibility Visibility    @default(PUBLIC)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  userId     String
   aiAnalysis AIAnalysis?
-
-  hashtags PostHashtag[]
+  comments   Comment[]
+  media      Media[]
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hashtags   PostHashtag[]
+  reactions  Reaction[]
+  savedBy    SavedPost[]
 
   @@index([userId])
 }
 
 model Media {
-  id           String    @id @default(cuid())
+  id           String     @id @default(cuid())
   type         MediaType
   url          String
   thumbnailUrl String?
-  createdAt    DateTime  @default(now())
-
-  postId String?
-  post   Post?   @relation(fields: [postId], references: [id], onDelete: Cascade)
-
-  commentId String?
-  comment   Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
-
-  messageId String?
-  message   Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
-
-  storyId String?
-  story   Story?  @relation(fields: [storyId], references: [id], onDelete: Cascade)
-
-  reelId String?
-  reel   Reel?   @relation(fields: [reelId], references: [id], onDelete: Cascade)
-
-  groupPostId String?
-  groupPost   GroupPost? @relation(fields: [groupPostId], references: [id], onDelete: Cascade)
-
-  // Media metadata
-  width      Int?
-  height     Int?
-  duration   Float? // Duration in seconds for video/audio
-  fileSize   Int? // Size in bytes
-  codec      String? // For video: h264, h265, etc.
-  bitrate    Int? // For video/audio: bitrate in kbps
-  resolution String? // E.g., "1080p", "4K"
+  createdAt    DateTime   @default(now())
+  postId       String?
+  commentId    String?
+  messageId    String?
+  storyId      String?
+  reelId       String?
+  bitrate      Int?
+  codec        String?
+  duration     Float?
+  fileSize     Int?
+  groupPostId  String?
+  height       Int?
+  resolution   String?
+  width        Int?
+  comment      Comment?   @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  groupPost    GroupPost? @relation(fields: [groupPostId], references: [id], onDelete: Cascade)
+  message      Message?   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  post         Post?      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reel         Reel?      @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  story        Story?     @relation(fields: [storyId], references: [id], onDelete: Cascade)
 
   @@index([postId])
   @@index([commentId])
@@ -220,23 +173,19 @@ model Media {
 }
 
 model Comment {
-  id        String   @id @default(cuid())
+  id        String     @id @default(cuid())
   content   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  postId String
-  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
-
-  parentId String?
-  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
-  replies  Comment[] @relation("CommentReplies")
-
-  reactions Reaction[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  userId    String
+  postId    String
+  parentId  String?
+  parent    Comment?   @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[]  @relation("CommentReplies")
+  post      Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   media     Media[]
+  reactions Reaction[]
 
   @@index([userId])
   @@index([postId])
@@ -247,15 +196,12 @@ model Reaction {
   id        String       @id @default(cuid())
   type      ReactionType
   createdAt DateTime     @default(now())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  postId String?
-  post   Post?   @relation(fields: [postId], references: [id], onDelete: Cascade)
-
+  userId    String
+  postId    String?
   commentId String?
-  comment   Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  comment   Comment?     @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  post      Post?        @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId, commentId])
   @@index([userId])
@@ -266,12 +212,10 @@ model Reaction {
 model SavedPost {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  postId String
-  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId])
   @@index([userId])
@@ -279,14 +223,12 @@ model SavedPost {
 }
 
 model Follow {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
-
-  followerId String
-  follower   User   @relation("FollowerUser", fields: [followerId], references: [id], onDelete: Cascade)
-
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  followerId  String
   followingId String
-  following   User   @relation("FollowingUser", fields: [followingId], references: [id], onDelete: Cascade)
+  follower    User     @relation("FollowerUser", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("FollowingUser", fields: [followingId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followingId])
   @@index([followerId])
@@ -298,12 +240,10 @@ model Friendship {
   status    FriendshipStatus @default(PENDING)
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
-
-  userId String
-  user   User   @relation("UserFriends", fields: [userId], references: [id], onDelete: Cascade)
-
-  friendId String
-  friend   User   @relation("FriendsOfUser", fields: [friendId], references: [id], onDelete: Cascade)
+  userId    String
+  friendId  String
+  friend    User             @relation("FriendsOfUser", fields: [friendId], references: [id], onDelete: Cascade)
+  user      User             @relation("UserFriends", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, friendId])
   @@index([userId])
@@ -311,29 +251,25 @@ model Friendship {
 }
 
 model Chat {
-  id        String   @id @default(cuid())
-  name      String?
-  isGroup   Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  id           String            @id @default(cuid())
+  name         String?
+  isGroup      Boolean           @default(false)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
   participants ChatParticipant[]
   messages     Message[]
 }
 
 model ChatParticipant {
-  id        String   @id @default(cuid())
-  role      ChatRole @default(MEMBER)
-  createdAt DateTime @default(now())
-
-  chatId String
-  chat   Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  id                String   @id @default(cuid())
+  role              ChatRole @default(MEMBER)
+  createdAt         DateTime @default(now())
+  chatId            String
+  userId            String
   lastReadMessageId String?
+  chat              Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
   lastReadMessage   Message? @relation(fields: [lastReadMessageId], references: [id])
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([chatId, userId])
   @@index([chatId])
@@ -341,24 +277,20 @@ model ChatParticipant {
 }
 
 model Message {
-  id        String    @id @default(cuid())
-  content   String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  isDeleted Boolean   @default(false)
-  expiresAt DateTime?
-
-  chatId String
-  chat   Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
-
-  senderId String
-  sender   User   @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
-
+  id         String            @id @default(cuid())
+  content    String?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  isDeleted  Boolean           @default(false)
+  expiresAt  DateTime?
+  chatId     String
+  senderId   String
   receiverId String?
-  receiver   User?   @relation("MessageReceiver", fields: [receiverId], references: [id])
-
-  media  Media[]
-  readBy ChatParticipant[]
+  readBy     ChatParticipant[]
+  media      Media[]
+  chat       Chat              @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  receiver   User?             @relation("MessageReceiver", fields: [receiverId], references: [id])
+  sender     User              @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([chatId])
   @@index([senderId])
@@ -366,62 +298,42 @@ model Message {
 }
 
 model Notification {
-  id           String               @id @default(cuid())
-  type         NotificationType
-  content      String?
-  isRead       Boolean              @default(false)
-  createdAt    DateTime             @default(now())
-  expiresAt    DateTime?
-  priority     NotificationPriority @default(NORMAL)
-  isMuted      Boolean              @default(false)
-  isActionable Boolean              @default(false)
-  actionLabel  String?
-  actionUrl    String?
-  imageUrl     String?
-
-  // Recipient info
-  recipientId String
-  recipient   User   @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
-
-  // Sender info
-  senderId String?
-  sender   User?   @relation("NotificationSender", fields: [senderId], references: [id])
-
-  // Related content references
-  postId    String?
-  commentId String?
-  messageId String?
-
-  // Group-related references
-  groupId        String?
-  group          Group?  @relation(fields: [groupId], references: [id])
-  groupPostId    String?
-  groupCommentId String?
-  groupEventId   String?
-  groupPollId    String?
-  groupFileId    String?
-  groupBadgeId   String?
-
-  // Page-related references
-  pageId String?
-  page   Page?   @relation(fields: [pageId], references: [id])
-
-  // Health-related references
-  healthProfileId String?
-
-  // General notification URL
-  url String?
-
-  // Delivery status for push notifications
-  deliveryStatus NotificationDeliveryStatus? @default(PENDING)
-  deliveredAt    DateTime?
-  readAt         DateTime?
-
-  // Metadata
-  metadata Json?
-
-  // Preferences override for this specific notification
-  overrideUserPreferences Boolean @default(false)
+  id                      String                      @id @default(cuid())
+  type                    NotificationType
+  content                 String?
+  isRead                  Boolean                     @default(false)
+  createdAt               DateTime                    @default(now())
+  recipientId             String
+  senderId                String?
+  postId                  String?
+  commentId               String?
+  messageId               String?
+  url                     String?
+  actionLabel             String?
+  actionUrl               String?
+  deliveredAt             DateTime?
+  deliveryStatus          NotificationDeliveryStatus? @default(PENDING)
+  expiresAt               DateTime?
+  groupBadgeId            String?
+  groupCommentId          String?
+  groupEventId            String?
+  groupFileId             String?
+  groupId                 String?
+  groupPollId             String?
+  groupPostId             String?
+  healthProfileId         String?
+  imageUrl                String?
+  isActionable            Boolean                     @default(false)
+  isMuted                 Boolean                     @default(false)
+  metadata                Json?
+  overrideUserPreferences Boolean                     @default(false)
+  pageId                  String?
+  priority                NotificationPriority        @default(NORMAL)
+  readAt                  DateTime?
+  group                   Group?                      @relation(fields: [groupId], references: [id])
+  page                    Page?                       @relation(fields: [pageId], references: [id])
+  recipient               User                        @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  sender                  User?                       @relation("NotificationSender", fields: [senderId], references: [id])
 
   @@index([recipientId])
   @@index([senderId])
@@ -433,25 +345,22 @@ model Notification {
 }
 
 model Topic {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  description String?
-  createdAt   DateTime @default(now())
-
-  userInterests UserInterest[]
+  id            String         @id @default(cuid())
+  name          String         @unique
+  description   String?
+  createdAt     DateTime       @default(now())
   postHashtags  PostHashtag[]
   reelHashtags  ReelHashtag[]
+  userInterests UserInterest[]
 }
 
 model UserInterest {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  topicId String
-  topic   Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  userId    String
+  topicId   String
+  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, topicId])
   @@index([userId])
@@ -461,12 +370,10 @@ model UserInterest {
 model PostHashtag {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-
-  postId String
-  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
-
-  topicId String
-  topic   Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  postId    String
+  topicId   String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
   @@unique([postId, topicId])
   @@index([postId])
@@ -476,26 +383,23 @@ model PostHashtag {
 model AIAnalysis {
   id               String   @id @default(cuid())
   sentiment        String?
-  topics           String?  @db.Text
-  suggestions      String?  @db.Text
-  detectedEntities String?  @db.Text
+  topics           String?
+  suggestions      String?
+  detectedEntities String?
   modelVersion     String?
   createdAt        DateTime @default(now())
-
-  postId String @unique
-  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId           String   @unique
+  post             Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 }
 
 model Story {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
+  id        String      @id @default(cuid())
+  createdAt DateTime    @default(now())
   expiresAt DateTime
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  media Media[]
-  views StoryView[]
+  userId    String
+  media     Media[]
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  views     StoryView[]
 
   @@index([userId])
 }
@@ -503,58 +407,45 @@ model Story {
 model StoryView {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-
-  storyId String
-  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
-
-  viewerId String
-  viewer   User   @relation(fields: [viewerId], references: [id], onDelete: Cascade)
+  storyId   String
+  viewerId  String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  viewer    User     @relation(fields: [viewerId], references: [id], onDelete: Cascade)
 
   @@unique([storyId, viewerId])
   @@index([storyId])
   @@index([viewerId])
 }
 
-// Enhanced Reel model and related models
 model Reel {
-  id        String   @id @default(cuid())
-  caption   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Enhanced fields
-  duration         Float? // Duration in seconds
-  viewCount        Int        @default(0)
-  likeCount        Int        @default(0)
-  commentCount     Int        @default(0)
-  shareCount       Int        @default(0)
-  visibility       Visibility @default(PUBLIC)
+  id               String         @id @default(cuid())
+  caption          String?
+  createdAt        DateTime       @default(now())
+  userId           String
+  aiAnalysis       String?
+  aspectRatio      String?
+  commentCount     Int            @default(0)
+  duration         Float?
+  isOriginalAudio  Boolean        @default(true)
+  isPublished      Boolean        @default(true)
+  likeCount        Int            @default(0)
+  processingStatus String         @default("COMPLETED")
+  shareCount       Int            @default(0)
   thumbnailUrl     String?
-  aspectRatio      String? // e.g., "9:16", "4:3"
-  processingStatus String     @default("COMPLETED") // "PROCESSING", "COMPLETED", "FAILED"
-  isOriginalAudio  Boolean    @default(true)
-  isPublished      Boolean    @default(true)
-
-  // User who created the reel
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Related content
-  media    Media[]
-  likes    ReelLike[]
-  comments ReelComment[]
-  shares   ReelShare[]
-  views    ReelView[]
-  savedBy  SavedReel[]
-
-  // Enhanced relationships
-  hashtags   ReelHashtag[]
-  audio      ReelAudio?
-  categories ReelCategory[]
-  effects    ReelEffect[]
-
-  // AI analysis
-  aiAnalysis String? @db.Text
+  updatedAt        DateTime       @updatedAt
+  viewCount        Int            @default(0)
+  visibility       Visibility     @default(PUBLIC)
+  media            Media[]
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  audio            ReelAudio?
+  comments         ReelComment[]
+  hashtags         ReelHashtag[]
+  likes            ReelLike[]
+  shares           ReelShare[]
+  views            ReelView[]
+  savedBy          SavedReel[]
+  categories       ReelCategory[] @relation("ReelToReelCategory")
+  effects          ReelEffect[]   @relation("ReelToReelEffect")
 
   @@index([userId])
   @@index([viewCount])
@@ -565,12 +456,10 @@ model Reel {
 model ReelLike {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-
-  reelId String
-  reel   Reel   @relation(fields: [reelId], references: [id], onDelete: Cascade)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reelId    String
+  userId    String
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([reelId, userId])
   @@index([reelId])
@@ -578,45 +467,35 @@ model ReelLike {
 }
 
 model ReelComment {
-  id        String   @id @default(cuid())
+  id        String        @id @default(cuid())
   content   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  likeCount Int      @default(0)
-
-  reelId String
-  reel   Reel   @relation(fields: [reelId], references: [id], onDelete: Cascade)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Support for comment replies
-  parentId String?
-  parent   ReelComment?  @relation("ReelCommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
-  replies  ReelComment[] @relation("ReelCommentReplies")
+  createdAt DateTime      @default(now())
+  reelId    String
+  userId    String
+  likeCount Int           @default(0)
+  parentId  String?
+  updatedAt DateTime      @updatedAt
+  parent    ReelComment?  @relation("ReelCommentReplies", fields: [parentId], references: [id])
+  replies   ReelComment[] @relation("ReelCommentReplies")
+  reel      Reel          @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([reelId])
   @@index([userId])
   @@index([parentId])
 }
 
-// New models for the enhanced reels system
-
 model ReelView {
   id             String   @id @default(cuid())
   createdAt      DateTime @default(now())
-  watchDuration  Float? // How many seconds the user watched
-  completionRate Float? // Percentage of the reel watched (0-1)
-
-  reelId String
-  reel   Reel   @relation(fields: [reelId], references: [id], onDelete: Cascade)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Additional tracking data
-  deviceInfo String?
-  location   String?
+  watchDuration  Float?
+  completionRate Float?
+  reelId         String
+  userId         String
+  deviceInfo     String?
+  location       String?
+  reel           Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([reelId])
   @@index([userId])
@@ -626,31 +505,25 @@ model ReelView {
 model ReelShare {
   id        String        @id @default(cuid())
   createdAt DateTime      @default(now())
-  platform  SharePlatform // Where the reel was shared
-
-  reelId String
-  reel   Reel   @relation(fields: [reelId], references: [id], onDelete: Cascade)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform  SharePlatform
+  reelId    String
+  userId    String
+  reel      Reel          @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([reelId])
   @@index([userId])
 }
 
 model SavedReel {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  reelId String
-  reel   Reel   @relation(fields: [reelId], references: [id], onDelete: Cascade)
-
-  // For collections/playlists
+  id         String        @id @default(cuid())
+  createdAt  DateTime      @default(now())
+  userId     String
+  reelId     String
   playlistId String?
-  playlist   ReelPlaylist? @relation(fields: [playlistId], references: [id], onDelete: SetNull)
+  playlist   ReelPlaylist? @relation(fields: [playlistId], references: [id])
+  reel       Reel          @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, reelId])
   @@index([userId])
@@ -661,12 +534,10 @@ model SavedReel {
 model ReelHashtag {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-
-  reelId String
-  reel   Reel   @relation(fields: [reelId], references: [id], onDelete: Cascade)
-
-  topicId String
-  topic   Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  reelId    String
+  topicId   String
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
   @@unique([reelId, topicId])
   @@index([reelId])
@@ -677,20 +548,16 @@ model ReelAudio {
   id          String   @id @default(cuid())
   title       String
   artistName  String?
-  duration    Float // Duration in seconds
+  duration    Float
   audioUrl    String
   waveformUrl String?
   isOriginal  Boolean  @default(false)
   useCount    Int      @default(0)
   createdAt   DateTime @default(now())
-
-  // Original reel (if this is original audio)
-  reelId String? @unique
-  reel   Reel?   @relation(fields: [reelId], references: [id], onDelete: SetNull)
-
-  // For music licensing and attribution
+  reelId      String?  @unique
   licenseInfo String?
   attribution String?
+  reel        Reel?    @relation(fields: [reelId], references: [id])
 
   @@index([title])
   @@index([useCount])
@@ -701,8 +568,7 @@ model ReelCategory {
   name      String   @unique
   iconUrl   String?
   createdAt DateTime @default(now())
-
-  reels Reel[]
+  reels     Reel[]   @relation("ReelToReelCategory")
 
   @@index([name])
 }
@@ -713,47 +579,42 @@ model ReelEffect {
   type        EffectType
   description String?
   iconUrl     String?
-  settings    Json? // Configuration for the effect
+  settings    Json?
   createdAt   DateTime   @default(now())
-
-  reels Reel[]
+  reels       Reel[]     @relation("ReelToReelEffect")
 
   @@index([name])
   @@index([type])
 }
 
 model ReelPlaylist {
-  id          String   @id @default(cuid())
+  id          String      @id @default(cuid())
   name        String
   description String?
-  isPrivate   Boolean  @default(false)
+  isPrivate   Boolean     @default(false)
   coverImage  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  userId String
-
-  savedReels SavedReel[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  userId      String
+  savedReels  SavedReel[]
 
   @@index([userId])
 }
 
 model Page {
-  id          String   @id @default(cuid())
-  name        String
-  handle      String   @unique
-  description String?  @db.Text
-  logoImage   String?
-  coverImage  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  ownerId String
-  owner   User   @relation("PageOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-
-  roles         PageRole[]
+  id            String         @id @default(cuid())
+  name          String
+  handle        String         @unique
+  description   String?
+  logoImage     String?
+  coverImage    String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  ownerId       String
   events        Event[]
   notifications Notification[]
+  owner         User           @relation("PageOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  roles         PageRole[]
 
   @@index([ownerId])
 }
@@ -762,12 +623,10 @@ model PageRole {
   id        String   @id @default(cuid())
   role      Role     @default(MEMBER)
   createdAt DateTime @default(now())
-
-  pageId String
-  page   Page   @relation(fields: [pageId], references: [id], onDelete: Cascade)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pageId    String
+  userId    String
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([pageId, userId])
   @@index([pageId])
@@ -775,37 +634,33 @@ model PageRole {
 }
 
 model Event {
-  id                String    @id @default(cuid())
+  id                String               @id @default(cuid())
   title             String
-  description       String?   @db.Text
+  description       String?
   location          String?
-  isOnline          Boolean   @default(false)
-  onlineUrl         String?
   startsAt          DateTime
   endsAt            DateTime?
   coverImage        String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  pageId            String?
+  creatorId         String
+  categoryId        String?
+  isOnline          Boolean              @default(false)
+  isPrivate         Boolean              @default(false)
+  isRecurring       Boolean              @default(false)
   maxParticipants   Int?
-  isPrivate         Boolean   @default(false)
-  isRecurring       Boolean   @default(false)
-  recurrencePattern String? // RRULE format
+  onlineUrl         String?
   recurrenceEndDate DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  pageId String?
-  page   Page?   @relation(fields: [pageId], references: [id], onDelete: SetNull)
-
-  creatorId String
-  creator   User   @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-
-  participants EventParticipation[]
-  comments     EventComment[]
-  updates      EventUpdate[]
-  media        EventMedia[]
-  eventTags    EventTagRelation[]
-
-  categoryId String?
-  category   EventCategory? @relation(fields: [categoryId], references: [id])
+  recurrencePattern String?
+  category          EventCategory?       @relation(fields: [categoryId], references: [id])
+  creator           User                 @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  page              Page?                @relation(fields: [pageId], references: [id])
+  comments          EventComment[]
+  media             EventMedia[]
+  participants      EventParticipation[]
+  eventTags         EventTagRelation[]
+  updates           EventUpdate[]
 
   @@index([pageId])
   @@index([creatorId])
@@ -815,20 +670,16 @@ model Event {
 }
 
 model EventParticipation {
-  id        String              @id @default(cuid())
-  status    ParticipationStatus @default(GOING)
-  createdAt DateTime            @default(now())
-  updatedAt DateTime            @updatedAt
-
-  eventId String
-  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // For waitlist functionality
-  isWaitlisted     Boolean @default(false)
+  id               String              @id @default(cuid())
+  status           ParticipationStatus @default(GOING)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  eventId          String
+  userId           String
+  isWaitlisted     Boolean             @default(false)
   waitlistPosition Int?
+  event            Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, userId])
   @@index([eventId])
@@ -838,15 +689,13 @@ model EventParticipation {
 
 model EventComment {
   id        String   @id @default(cuid())
-  content   String   @db.Text
+  content   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  eventId String
-  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventId   String
+  userId    String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([eventId])
   @@index([userId])
@@ -854,15 +703,13 @@ model EventComment {
 
 model EventUpdate {
   id          String   @id @default(cuid())
-  content     String   @db.Text
+  content     String
   isImportant Boolean  @default(false)
   createdAt   DateTime @default(now())
-
-  eventId String
-  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventId     String
+  userId      String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([eventId])
   @@index([userId])
@@ -873,12 +720,10 @@ model EventMedia {
   url       String
   type      MediaType
   createdAt DateTime  @default(now())
-
-  eventId String
-  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventId   String
+  userId    String
+  event     Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([eventId])
   @@index([userId])
@@ -891,35 +736,30 @@ model EventCategory {
   color       String?
   icon        String?
   createdAt   DateTime @default(now())
-
-  events Event[]
+  events      Event[]
 }
 
 model EventTag {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  createdAt DateTime @default(now())
-
-  events EventTagRelation[]
+  id        String             @id @default(cuid())
+  name      String             @unique
+  createdAt DateTime           @default(now())
+  events    EventTagRelation[]
 }
 
 model EventTagRelation {
-  id String @id @default(cuid())
-
+  id      String   @id @default(cuid())
   eventId String
-  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  tagId String
-  tag   EventTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tagId   String
+  event   Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  tag     EventTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, tagId])
   @@index([eventId])
   @@index([tagId])
 }
 
-// Health profile for Better Me section
 model HealthProfile {
-  id                  String   @id @default(cuid())
+  id                  String                   @id @default(cuid())
   age                 Int?
   weight              Float?
   height              Float?
@@ -927,94 +767,82 @@ model HealthProfile {
   activityLevel       String?
   goals               String?
   dietaryRestrictions String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  mealPlans       MealPlan[]
-  workoutPlans    WorkoutPlan[]
-  progressRecords ProgressRecord[]
-
-  // AI Recommendations
-  aiRecommendations AIHealthRecommendation[]
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  userId              String                   @unique
+  aiRecommendations   AIHealthRecommendation[]
+  user                User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mealPlans           MealPlan[]
+  progressRecords     ProgressRecord[]
+  workoutPlans        WorkoutPlan[]
 }
 
 model MealPlan {
-  id          String    @id @default(cuid())
+  id          String        @id @default(cuid())
   name        String
   description String?
   startDate   DateTime
   endDate     DateTime?
-  createdAt   DateTime  @default(now())
-
-  profileId String
-  profile   HealthProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-
-  meals Meal[]
+  createdAt   DateTime      @default(now())
+  profileId   String
+  meals       Meal[]
+  profile     HealthProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId])
 }
 
 model Meal {
-  id       String  @id @default(cuid())
+  id       String   @id @default(cuid())
   name     String
-  type     String // Breakfast, Lunch, Dinner, Snack
+  type     String
   calories Int?
   protein  Int?
   carbs    Int?
   fat      Int?
-  recipe   String? @db.Text
+  recipe   String?
   imageUrl String?
-
-  planId String
-  plan   MealPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  planId   String
+  plan     MealPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@index([planId])
 }
 
 model WorkoutPlan {
-  id          String    @id @default(cuid())
+  id          String        @id @default(cuid())
   name        String
   description String?
   startDate   DateTime
   endDate     DateTime?
-  createdAt   DateTime  @default(now())
-
-  profileId String
-  profile   HealthProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-
-  workouts Workout[]
+  createdAt   DateTime      @default(now())
+  profileId   String
+  workouts    Workout[]
+  profile     HealthProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId])
 }
 
 model Workout {
-  id          String  @id @default(cuid())
+  id          String            @id @default(cuid())
   name        String
-  duration    Int? // in minutes
-  type        String // Cardio, Strength, Flexibility, etc.
-  description String? @db.Text
+  duration    Int?
+  type        String
+  description String?
   videoUrl    String?
-
-  planId String
-  plan   WorkoutPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-
-  exercises WorkoutExercise[]
+  planId      String
+  plan        WorkoutPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+  exercises   WorkoutExercise[]
 
   @@index([planId])
 }
 
 model WorkoutExercise {
-  id       String  @id @default(cuid())
-  name     String
-  sets     Int?
-  reps     Int?
-  duration Int? // in seconds
-  restTime Int? // in seconds
-  notes    String?
-
+  id        String  @id @default(cuid())
+  name      String
+  sets      Int?
+  reps      Int?
+  duration  Int?
+  restTime  Int?
+  notes     String?
   workoutId String
   workout   Workout @relation(fields: [workoutId], references: [id], onDelete: Cascade)
 
@@ -1022,68 +850,62 @@ model WorkoutExercise {
 }
 
 model ProgressRecord {
-  id           String   @id @default(cuid())
-  date         DateTime @default(now())
+  id           String        @id @default(cuid())
+  date         DateTime      @default(now())
   weight       Float?
-  energyLevel  Int? // Scale 1-10
-  sleepQuality Int? // Scale 1-10
+  energyLevel  Int?
+  sleepQuality Int?
   notes        String?
   photoUrl     String?
-
-  profileId String
-  profile   HealthProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profileId    String
+  profile      HealthProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId])
 }
 
-// AI-related models
 model AITokenLimit {
   id        String   @id @default(cuid())
   userId    String   @unique
-  tier      String   @default("FREE") // FREE, BASIC, PRO, ENTERPRISE
+  tier      String   @default("FREE")
   limit     Int      @default(150)
   usage     Int      @default(0)
   resetAt   DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model AIContentAnalysis {
   id                   String   @id @default(cuid())
   userId               String
-  content              String   @db.Text
+  content              String
   sentiment            String
   topics               String
   engagementPrediction String
   modelUsed            String
   tokenUsage           Int
   createdAt            DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model AIHealthRecommendation {
-  id              String   @id @default(cuid())
+  id              String        @id @default(cuid())
   userId          String
   healthProfileId String
   goals           String
-  recommendations String   @db.Text
+  recommendations String
   modelUsed       String
   tokenUsage      Int
-  createdAt       DateTime @default(now())
-
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  healthProfile HealthProfile @relation(fields: [healthProfileId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+  healthProfile   HealthProfile @relation(fields: [healthProfileId], references: [id], onDelete: Cascade)
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([healthProfileId])
 }
 
-// Notification preference models
 model NotificationPreference {
   id                 String   @id @default(cuid())
   emailEnabled       Boolean  @default(true)
@@ -1091,23 +913,22 @@ model NotificationPreference {
   inAppEnabled       Boolean  @default(true)
   smsEnabled         Boolean  @default(false)
   quietHoursEnabled  Boolean  @default(false)
-  quietHoursStart    String? // Format: HH:MM (24h)
-  quietHoursEnd      String? // Format: HH:MM (24h)
-  quietHoursDays     String? // Comma-separated days (MON,TUE,etc)
+  quietHoursStart    String?
+  quietHoursEnd      String?
+  quietHoursDays     String?
   weekendMuteEnabled Boolean  @default(false)
   digestEnabled      Boolean  @default(false)
-  digestFrequency    String?  @default("DAILY") // DAILY, WEEKLY
-  digestDay          String? // For weekly digest: MON, TUE, etc.
-  digestTime         String? // Format: HH:MM (24h)
+  digestFrequency    String?  @default("DAILY")
+  digestDay          String?
+  digestTime         String?
   updatedAt          DateTime @updatedAt
-
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model NotificationCategoryPreference {
   id           String               @id @default(cuid())
-  category     String // E.g., "SOCIAL", "GROUP", "SYSTEM", etc.
+  category     String
   inAppEnabled Boolean              @default(true)
   emailEnabled Boolean              @default(false)
   pushEnabled  Boolean              @default(true)
@@ -1116,9 +937,8 @@ model NotificationCategoryPreference {
   muteUntil    DateTime?
   priority     NotificationPriority @default(NORMAL)
   updatedAt    DateTime             @updatedAt
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, category])
   @@index([userId])
@@ -1138,12 +958,9 @@ model NotificationGroupPreference {
   mentionsEnabled   Boolean   @default(true)
   announcementsOnly Boolean   @default(false)
   updatedAt         DateTime  @updatedAt
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Which group this preference applies to
-  groupId String
+  userId            String
+  groupId           String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, groupId])
   @@index([userId])
@@ -1153,7 +970,7 @@ model NotificationGroupPreference {
 model PushDevice {
   id          String   @id @default(cuid())
   deviceToken String   @unique
-  platform    String // "ios", "android", "web"
+  platform    String
   deviceName  String?
   deviceModel String?
   osVersion   String?
@@ -1161,48 +978,37 @@ model PushDevice {
   isActive    Boolean  @default(true)
   lastActive  DateTime @default(now())
   createdAt   DateTime @default(now())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([deviceToken])
 }
 
 model ScheduledNotification {
-  id                String               @id @default(cuid())
+  id                String                @id @default(cuid())
   type              NotificationType
   content           String?
   scheduledFor      DateTime
-  recurring         Boolean              @default(false)
-  recurrencePattern String? // CRON format
+  recurring         Boolean               @default(false)
+  recurrencePattern String?
   recurrenceEnd     DateTime?
-  channels          String? // Comma-separated: IN_APP,EMAIL,PUSH,SMS
-  priority          NotificationPriority @default(NORMAL)
-  status            String               @default("PENDING") // PENDING, SENT, CANCELLED, FAILED
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-
-  // Target user(s)
-  recipientId String? // For individual notifications
-  segmentId   String? // For targeting a segment of users
-  groupId     String? // For targeting members of a group
-
-  // Related content references
-  entityType String? // E.g., "post", "event", etc.
-  entityId   String? // ID of the related entity
-
-  // Additional data
-  metadata Json?
-
-  // Tracking information
-  sentCount  Int @default(0)
-  openCount  Int @default(0)
-  clickCount Int @default(0)
-
-  // Notification template
-  templateId String?
-  template   NotificationTemplate? @relation(fields: [templateId], references: [id])
+  channels          String?
+  priority          NotificationPriority  @default(NORMAL)
+  status            String                @default("PENDING")
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  recipientId       String?
+  segmentId         String?
+  groupId           String?
+  entityType        String?
+  entityId          String?
+  metadata          Json?
+  sentCount         Int                   @default(0)
+  openCount         Int                   @default(0)
+  clickCount        Int                   @default(0)
+  templateId        String?
+  template          NotificationTemplate? @relation(fields: [templateId], references: [id])
 
   @@index([recipientId])
   @@index([scheduledFor])
@@ -1211,26 +1017,20 @@ model ScheduledNotification {
 }
 
 model NotificationTemplate {
-  id                String           @id @default(cuid())
-  name              String
-  description       String?
-  type              NotificationType
-  titleTemplate     String?
-  contentTemplate   String
-  actionLabel       String?
-  actionUrlTemplate String?
-  imageUrl          String?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-
-  // Variables used in the template, stored as JSON
-  variables Json?
-
-  // Notification settings
-  channels String // Comma-separated: IN_APP,EMAIL,PUSH,SMS
-  priority NotificationPriority @default(NORMAL)
-
-  // Related scheduled notifications
+  id                     String                  @id @default(cuid())
+  name                   String
+  description            String?
+  type                   NotificationType
+  titleTemplate          String?
+  contentTemplate        String
+  actionLabel            String?
+  actionUrlTemplate      String?
+  imageUrl               String?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  variables              Json?
+  channels               String
+  priority               NotificationPriority    @default(NORMAL)
   scheduledNotifications ScheduledNotification[]
 }
 
@@ -1239,15 +1039,13 @@ model NotificationLog {
   notificationId String
   userId         String
   channel        NotificationChannel
-  event          String // "delivered", "read", "clicked", "dismissed"
-  deviceId       String? // For push notifications
-  deviceInfo     Json? // Platform, browser, etc.
+  event          String
+  deviceId       String?
+  deviceInfo     Json?
   timestamp      DateTime            @default(now())
   success        Boolean             @default(true)
   errorMessage   String?
-
-  // Extra data
-  metadata Json?
+  metadata       Json?
 
   @@index([notificationId])
   @@index([userId])
@@ -1259,25 +1057,396 @@ model NotificationLog {
 model AIChatInteraction {
   id          String   @id @default(cuid())
   userId      String
-  userMessage String   @db.Text
-  aiResponse  String   @db.Text
+  userMessage String
+  aiResponse  String
   modelUsed   String
   tokenUsage  Int
   createdAt   DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
-// Enums
+model Group {
+  id                  String                 @id @default(cuid())
+  name                String
+  handle              String                 @unique
+  description         String?
+  privacy             GroupPrivacy           @default(PUBLIC)
+  rules               String?
+  logoImage           String?
+  coverImage          String?
+  isVerified          Boolean                @default(false)
+  autoApproveMembers  Boolean                @default(true)
+  allowMemberPosts    Boolean                @default(true)
+  requirePostApproval Boolean                @default(false)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  creatorId           String
+  creator             User                   @relation("GroupCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  badges              GroupBadge[]
+  discussionTopics    GroupDiscussionTopic[]
+  events              GroupEvent[]
+  files               GroupFile[]
+  invitations         GroupInvitation[]
+  joinRequests        GroupJoinRequest[]
+  members             GroupMember[]
+  polls               GroupPoll[]
+  posts               GroupPost[]
+  reports             GroupReport[]
+  settings            GroupSettings?
+  topics              GroupTopic[]
+  notifications       Notification[]
+
+  @@index([creatorId])
+}
+
+model GroupSettings {
+  id                          String  @id @default(cuid())
+  welcomeMessage              String?
+  primaryColor                String?
+  enableMemberList            Boolean @default(true)
+  enableDiscussions           Boolean @default(true)
+  enableFiles                 Boolean @default(true)
+  enableEvents                Boolean @default(true)
+  enablePolls                 Boolean @default(true)
+  postNotificationsEnabled    Boolean @default(true)
+  commentNotificationsEnabled Boolean @default(true)
+  eventNotificationsEnabled   Boolean @default(true)
+  allowNonMemberView          Boolean @default(true)
+  groupId                     String  @unique
+  group                       Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+}
+
+model GroupTopic {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  color       String?
+  icon        String?
+  createdAt   DateTime    @default(now())
+  groupId     String
+  posts       GroupPost[]
+  group       Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, name])
+  @@index([groupId])
+}
+
+model GroupMember {
+  id         String                 @id @default(cuid())
+  role       GroupRole              @default(MEMBER)
+  joinedAt   DateTime               @default(now())
+  lastActive DateTime               @default(now())
+  isActive   Boolean                @default(true)
+  reputation Int                    @default(0)
+  notes      String?
+  userId     String
+  groupId    String
+  badges     GroupBadgeAssignment[]
+  group      Group                  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([userId])
+  @@index([groupId])
+}
+
+model GroupInvitation {
+  id            String    @id @default(cuid())
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime?
+  message       String?
+  status        String    @default("PENDING")
+  groupId       String
+  invitedById   String
+  invitedUserId String
+  group         Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  invitedBy     User      @relation("InvitingUser", fields: [invitedById], references: [id], onDelete: Cascade)
+  invitedUser   User      @relation("InvitedUser", fields: [invitedUserId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([invitedUserId])
+  @@index([invitedById])
+}
+
+model GroupJoinRequest {
+  id        String   @id @default(cuid())
+  message   String?
+  status    String   @default("PENDING")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([groupId])
+}
+
+model GroupPost {
+  id             String             @id @default(cuid())
+  content        String
+  status         GroupContentStatus @default(PUBLISHED)
+  isPinned       Boolean            @default(false)
+  isAnnouncement Boolean            @default(false)
+  isEdited       Boolean            @default(false)
+  viewCount      Int                @default(0)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  userId         String
+  groupId        String
+  topicId        String?
+  comments       GroupComment[]
+  group          Group              @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  topic          GroupTopic?        @relation(fields: [topicId], references: [id])
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reactions      GroupReaction[]
+  media          Media[]
+
+  @@index([userId])
+  @@index([groupId])
+  @@index([topicId])
+}
+
+model GroupComment {
+  id        String             @id @default(cuid())
+  content   String
+  status    GroupContentStatus @default(PUBLISHED)
+  isEdited  Boolean            @default(false)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  userId    String
+  postId    String
+  parentId  String?
+  parent    GroupComment?      @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   GroupComment[]     @relation("CommentReplies")
+  post      GroupPost          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reactions GroupReaction[]
+
+  @@index([userId])
+  @@index([postId])
+  @@index([parentId])
+}
+
+model GroupReaction {
+  id        String        @id @default(cuid())
+  type      ReactionType
+  createdAt DateTime      @default(now())
+  userId    String
+  postId    String?
+  commentId String?
+  comment   GroupComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  post      GroupPost?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId, commentId])
+  @@index([userId])
+  @@index([postId])
+  @@index([commentId])
+}
+
+model GroupDiscussionTopic {
+  id        String                 @id @default(cuid())
+  title     String
+  content   String
+  isLocked  Boolean                @default(false)
+  isPinned  Boolean                @default(false)
+  viewCount Int                    @default(0)
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+  creatorId String
+  groupId   String
+  replies   GroupDiscussionReply[]
+  creator   User                   @relation("TopicCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  group     Group                  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([creatorId])
+  @@index([groupId])
+}
+
+model GroupDiscussionReply {
+  id               String                 @id @default(cuid())
+  content          String
+  isEdited         Boolean                @default(false)
+  isAcceptedAnswer Boolean                @default(false)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  creatorId        String
+  topicId          String
+  parentId         String?
+  creator          User                   @relation("ReplyCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  parent           GroupDiscussionReply?  @relation("ReplyReplies", fields: [parentId], references: [id])
+  replies          GroupDiscussionReply[] @relation("ReplyReplies")
+  topic            GroupDiscussionTopic   @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([creatorId])
+  @@index([topicId])
+  @@index([parentId])
+}
+
+model GroupFile {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  fileType      String?
+  fileSize      Int?
+  fileUrl       String
+  thumbnailUrl  String?
+  downloadCount Int      @default(0)
+  createdAt     DateTime @default(now())
+  uploaderId    String
+  groupId       String
+  group         Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  uploader      User     @relation("FileUploader", fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  @@index([uploaderId])
+  @@index([groupId])
+}
+
+model GroupEvent {
+  id           String                    @id @default(cuid())
+  title        String
+  description  String?
+  location     String?
+  isOnline     Boolean                   @default(false)
+  onlineUrl    String?
+  startsAt     DateTime
+  endsAt       DateTime?
+  coverImage   String?
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+  creatorId    String
+  groupId      String
+  creator      User                      @relation("EventCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  group        Group                     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  participants GroupEventParticipation[]
+
+  @@index([creatorId])
+  @@index([groupId])
+}
+
+model GroupEventParticipation {
+  id        String              @id @default(cuid())
+  status    ParticipationStatus @default(GOING)
+  createdAt DateTime            @default(now())
+  eventId   String
+  userId    String
+  event     GroupEvent          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+}
+
+model GroupPoll {
+  id            String            @id @default(cuid())
+  question      String
+  description   String?
+  isMultiChoice Boolean           @default(false)
+  isAnonymous   Boolean           @default(false)
+  expiresAt     DateTime?
+  createdAt     DateTime          @default(now())
+  creatorId     String
+  groupId       String
+  creator       User              @relation("PollCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  group         Group             @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  options       GroupPollOption[]
+  votes         GroupPollVote[]
+
+  @@index([creatorId])
+  @@index([groupId])
+}
+
+model GroupPollOption {
+  id     String          @id @default(cuid())
+  text   String
+  pollId String
+  poll   GroupPoll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes  GroupPollVote[]
+
+  @@index([pollId])
+}
+
+model GroupPollVote {
+  id        String          @id @default(cuid())
+  createdAt DateTime        @default(now())
+  userId    String
+  pollId    String
+  optionId  String
+  option    GroupPollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  poll      GroupPoll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pollId, optionId])
+  @@index([userId])
+  @@index([pollId])
+  @@index([optionId])
+}
+
+model GroupBadge {
+  id          String                 @id @default(cuid())
+  name        String
+  description String?
+  image       String?
+  criteria    String?
+  points      Int                    @default(0)
+  createdAt   DateTime               @default(now())
+  userId      String?
+  groupId     String
+  group       Group                  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user        User?                  @relation(fields: [userId], references: [id])
+  assignments GroupBadgeAssignment[]
+
+  @@index([userId])
+  @@index([groupId])
+}
+
+model GroupBadgeAssignment {
+  id        String      @id @default(cuid())
+  awardedAt DateTime    @default(now())
+  reason    String?
+  badgeId   String
+  memberId  String
+  badge     GroupBadge  @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  member    GroupMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([badgeId, memberId])
+  @@index([badgeId])
+  @@index([memberId])
+}
+
+model GroupReport {
+  id             String       @id @default(cuid())
+  type           ReportType
+  reason         String
+  status         ReportStatus @default(PENDING)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  resolvedAt     DateTime?
+  creatorId      String
+  groupId        String
+  reportedUserId String?
+  postId         String?
+  commentId      String?
+  creator        User         @relation("ReportCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  group          Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  reportedUser   User?        @relation("ReportedUser", fields: [reportedUserId], references: [id])
+
+  @@index([creatorId])
+  @@index([groupId])
+  @@index([reportedUserId])
+}
+
 enum Visibility {
   PUBLIC
   FRIENDS
   PRIVATE
 }
 
-// Notification related enums
 enum NotificationPriority {
   LOW
   NORMAL
@@ -1327,7 +1496,6 @@ enum ChatRole {
 }
 
 enum NotificationType {
-  // User-related notifications
   FOLLOW
   LIKE
   COMMENT
@@ -1335,8 +1503,6 @@ enum NotificationType {
   FRIEND_REQUEST
   MESSAGE
   SYSTEM
-
-  // Group-related notifications
   GROUP_INVITE
   GROUP_JOIN_REQUEST
   GROUP_JOIN_APPROVED
@@ -1350,28 +1516,16 @@ enum NotificationType {
   GROUP_MENTION
   GROUP_FILE_UPLOAD
   GROUP_BADGE_AWARDED
-
-  // Page-related notifications
   PAGE_INVITE
   PAGE_POST
   PAGE_EVENT
-
-  // Content notifications
   POST_TRENDING
   CONTENT_REMOVED
-
-  // AI-related notifications
   AI_RECOMMENDATION
-
-  // Health-related notifications
   HEALTH_REMINDER
   HEALTH_GOAL_ACHIEVED
-
-  // System notifications
   SECURITY_ALERT
   ACCOUNT_UPDATE
-
-  // Reel-related notifications
   REEL_LIKE
   REEL_COMMENT
   REEL_SHARE
@@ -1392,9 +1546,8 @@ enum ParticipationStatus {
   DECLINED
 }
 
-// New enums for the enhanced reels system
 enum SharePlatform {
-  INTERNAL // Within the app
+  INTERNAL
   FACEBOOK
   TWITTER
   INSTAGRAM
@@ -1417,34 +1570,26 @@ enum EffectType {
   OTHER
 }
 
-//
-// Group Models
-//
-
-// Group visibility types
 enum GroupPrivacy {
-  PUBLIC // Anyone can see and join
-  PRIVATE // Anyone can see, but requires approval to join
-  SECRET // Only visible to members, requires invitation to join
+  PUBLIC
+  PRIVATE
+  SECRET
 }
 
-// Group member role
 enum GroupRole {
-  OWNER // Owner/Creator of the group
-  ADMIN // Admin with full permissions
-  MODERATOR // Can moderate content
-  MEMBER // Regular member
+  OWNER
+  ADMIN
+  MODERATOR
+  MEMBER
 }
 
-// Group content status
 enum GroupContentStatus {
-  PUBLISHED // Approved and visible
-  PENDING // Pending moderation
-  REJECTED // Rejected by moderators
-  ARCHIVED // Archived/hidden
+  PUBLISHED
+  PENDING
+  REJECTED
+  ARCHIVED
 }
 
-// Report status
 enum ReportStatus {
   PENDING
   APPROVED
@@ -1452,7 +1597,6 @@ enum ReportStatus {
   RESOLVED
 }
 
-// Report type
 enum ReportType {
   SPAM
   HARASSMENT
@@ -1460,464 +1604,4 @@ enum ReportType {
   MISINFORMATION
   INAPPROPRIATE_CONTENT
   OTHER
-}
-
-// Main Group model
-model Group {
-  id                  String       @id @default(cuid())
-  name                String
-  handle              String       @unique
-  description         String?      @db.Text
-  privacy             GroupPrivacy @default(PUBLIC)
-  rules               String?      @db.Text
-  logoImage           String?
-  coverImage          String?
-  isVerified          Boolean      @default(false)
-  autoApproveMembers  Boolean      @default(true)
-  allowMemberPosts    Boolean      @default(true)
-  requirePostApproval Boolean      @default(false)
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
-
-  // Group creator
-  creatorId String
-  creator   User   @relation("GroupCreator", fields: [creatorId], references: [id], onDelete: Cascade)
-
-  // Group relationships
-  members          GroupMember[]
-  invitations      GroupInvitation[]
-  joinRequests     GroupJoinRequest[]
-  posts            GroupPost[]
-  topics           GroupTopic[]
-  discussionTopics GroupDiscussionTopic[]
-  files            GroupFile[]
-  events           GroupEvent[]
-  polls            GroupPoll[]
-  badges           GroupBadge[]
-  reports          GroupReport[]
-  notifications    Notification[]
-
-  // Group settings
-  settings GroupSettings?
-
-  @@index([creatorId])
-}
-
-// Group settings
-model GroupSettings {
-  id                          String  @id @default(cuid())
-  welcomeMessage              String? @db.Text
-  primaryColor                String?
-  enableMemberList            Boolean @default(true)
-  enableDiscussions           Boolean @default(true)
-  enableFiles                 Boolean @default(true)
-  enableEvents                Boolean @default(true)
-  enablePolls                 Boolean @default(true)
-  postNotificationsEnabled    Boolean @default(true)
-  commentNotificationsEnabled Boolean @default(true)
-  eventNotificationsEnabled   Boolean @default(true)
-  allowNonMemberView          Boolean @default(true)
-
-  // Group relationship
-  groupId String @unique
-  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-}
-
-// Group topics/categories
-model GroupTopic {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  color       String?
-  icon        String?
-  createdAt   DateTime @default(now())
-
-  groupId String
-  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  // Related content
-  posts GroupPost[]
-
-  @@unique([groupId, name])
-  @@index([groupId])
-}
-
-// Group membership
-model GroupMember {
-  id         String    @id @default(cuid())
-  role       GroupRole @default(MEMBER)
-  joinedAt   DateTime  @default(now())
-  lastActive DateTime  @default(now())
-  isActive   Boolean   @default(true)
-  reputation Int       @default(0)
-  notes      String?
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  groupId String
-  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  // Member badges
-  badges GroupBadgeAssignment[]
-
-  @@unique([groupId, userId])
-  @@index([userId])
-  @@index([groupId])
-}
-
-// Group invitation
-model GroupInvitation {
-  id        String    @id @default(cuid())
-  createdAt DateTime  @default(now())
-  expiresAt DateTime?
-  message   String?
-  status    String    @default("PENDING") // PENDING, ACCEPTED, REJECTED
-
-  groupId String
-  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  invitedById String
-  invitedBy   User   @relation("InvitingUser", fields: [invitedById], references: [id], onDelete: Cascade)
-
-  invitedUserId String
-  invitedUser   User   @relation("InvitedUser", fields: [invitedUserId], references: [id], onDelete: Cascade)
-
-  @@index([groupId])
-  @@index([invitedUserId])
-  @@index([invitedById])
-}
-
-// Group join requests
-model GroupJoinRequest {
-  id        String   @id @default(cuid())
-  message   String?
-  status    String   @default("PENDING") // PENDING, APPROVED, REJECTED
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  groupId String
-  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([groupId])
-}
-
-// Group posts
-model GroupPost {
-  id             String             @id @default(cuid())
-  content        String             @db.Text
-  status         GroupContentStatus @default(PUBLISHED)
-  isPinned       Boolean            @default(false)
-  isAnnouncement Boolean            @default(false)
-  isEdited       Boolean            @default(false)
-  viewCount      Int                @default(0)
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  groupId String
-  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  topicId String?
-  topic   GroupTopic? @relation(fields: [topicId], references: [id], onDelete: SetNull)
-
-  // Related content
-  media     Media[]
-  comments  GroupComment[]
-  reactions GroupReaction[]
-
-  @@index([userId])
-  @@index([groupId])
-  @@index([topicId])
-}
-
-// Group comments
-model GroupComment {
-  id        String             @id @default(cuid())
-  content   String
-  status    GroupContentStatus @default(PUBLISHED)
-  isEdited  Boolean            @default(false)
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  postId String
-  post   GroupPost @relation(fields: [postId], references: [id], onDelete: Cascade)
-
-  parentId String?
-  parent   GroupComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
-  replies  GroupComment[] @relation("CommentReplies")
-
-  reactions GroupReaction[]
-
-  @@index([userId])
-  @@index([postId])
-  @@index([parentId])
-}
-
-// Group reactions
-model GroupReaction {
-  id        String       @id @default(cuid())
-  type      ReactionType
-  createdAt DateTime     @default(now())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  postId String?
-  post   GroupPost? @relation(fields: [postId], references: [id], onDelete: Cascade)
-
-  commentId String?
-  comment   GroupComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, postId, commentId])
-  @@index([userId])
-  @@index([postId])
-  @@index([commentId])
-}
-
-// Group discussions (forum)
-model GroupDiscussionTopic {
-  id        String   @id @default(cuid())
-  title     String
-  content   String   @db.Text
-  isLocked  Boolean  @default(false)
-  isPinned  Boolean  @default(false)
-  viewCount Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  creatorId String
-  creator   User   @relation("TopicCreator", fields: [creatorId], references: [id], onDelete: Cascade)
-
-  groupId String
-  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  replies GroupDiscussionReply[]
-
-  @@index([creatorId])
-  @@index([groupId])
-}
-
-// Group discussion replies
-model GroupDiscussionReply {
-  id               String   @id @default(cuid())
-  content          String   @db.Text
-  isEdited         Boolean  @default(false)
-  isAcceptedAnswer Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  creatorId String
-  creator   User   @relation("ReplyCreator", fields: [creatorId], references: [id], onDelete: Cascade)
-
-  topicId String
-  topic   GroupDiscussionTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
-
-  parentId String?
-  parent   GroupDiscussionReply?  @relation("ReplyReplies", fields: [parentId], references: [id], onDelete: SetNull)
-  replies  GroupDiscussionReply[] @relation("ReplyReplies")
-
-  @@index([creatorId])
-  @@index([topicId])
-  @@index([parentId])
-}
-
-// Group files
-model GroupFile {
-  id            String   @id @default(cuid())
-  name          String
-  description   String?
-  fileType      String?
-  fileSize      Int?
-  fileUrl       String
-  thumbnailUrl  String?
-  downloadCount Int      @default(0)
-  createdAt     DateTime @default(now())
-
-  uploaderId String
-  uploader   User   @relation("FileUploader", fields: [uploaderId], references: [id], onDelete: Cascade)
-
-  groupId String
-  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  @@index([uploaderId])
-  @@index([groupId])
-}
-
-// Group events
-model GroupEvent {
-  id          String    @id @default(cuid())
-  title       String
-  description String?   @db.Text
-  location    String?
-  isOnline    Boolean   @default(false)
-  onlineUrl   String?
-  startsAt    DateTime
-  endsAt      DateTime?
-  coverImage  String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  creatorId String
-  creator   User   @relation("EventCreator", fields: [creatorId], references: [id], onDelete: Cascade)
-
-  groupId String
-  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  participants GroupEventParticipation[]
-
-  @@index([creatorId])
-  @@index([groupId])
-}
-
-// Group event participation
-model GroupEventParticipation {
-  id        String              @id @default(cuid())
-  status    ParticipationStatus @default(GOING)
-  createdAt DateTime            @default(now())
-
-  eventId String
-  event   GroupEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([eventId, userId])
-  @@index([eventId])
-  @@index([userId])
-}
-
-// Group polls
-model GroupPoll {
-  id            String    @id @default(cuid())
-  question      String
-  description   String?
-  isMultiChoice Boolean   @default(false)
-  isAnonymous   Boolean   @default(false)
-  expiresAt     DateTime?
-  createdAt     DateTime  @default(now())
-
-  creatorId String
-  creator   User   @relation("PollCreator", fields: [creatorId], references: [id], onDelete: Cascade)
-
-  groupId String
-  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  options GroupPollOption[]
-  votes   GroupPollVote[]
-
-  @@index([creatorId])
-  @@index([groupId])
-}
-
-// Group poll options
-model GroupPollOption {
-  id   String @id @default(cuid())
-  text String
-
-  pollId String
-  poll   GroupPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
-
-  votes GroupPollVote[]
-
-  @@index([pollId])
-}
-
-// Group poll votes
-model GroupPollVote {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  pollId String
-  poll   GroupPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
-
-  optionId String
-  option   GroupPollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, pollId, optionId])
-  @@index([userId])
-  @@index([pollId])
-  @@index([optionId])
-}
-
-// Group badge system
-model GroupBadge {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  image       String?
-  criteria    String?
-  points      Int      @default(0)
-  createdAt   DateTime @default(now())
-
-  userId String?
-  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  groupId String
-  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  assignments GroupBadgeAssignment[]
-
-  @@index([userId])
-  @@index([groupId])
-}
-
-// Group badge assignments to members
-model GroupBadgeAssignment {
-  id        String   @id @default(cuid())
-  awardedAt DateTime @default(now())
-  reason    String?
-
-  badgeId String
-  badge   GroupBadge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
-
-  memberId String
-  member   GroupMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
-
-  @@unique([badgeId, memberId])
-  @@index([badgeId])
-  @@index([memberId])
-}
-
-// Group report system
-model GroupReport {
-  id         String       @id @default(cuid())
-  type       ReportType
-  reason     String
-  status     ReportStatus @default(PENDING)
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-  resolvedAt DateTime?
-
-  // Reporter
-  creatorId String
-  creator   User   @relation("ReportCreator", fields: [creatorId], references: [id], onDelete: Cascade)
-
-  // Group
-  groupId String
-  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  // Reported content references (only one will be set)
-  reportedUserId String?
-  reportedUser   User?   @relation("ReportedUser", fields: [reportedUserId], references: [id], onDelete: SetNull)
-
-  // Other reportable content IDs
-  postId    String?
-  commentId String?
-
-  @@index([creatorId])
-  @@index([groupId])
-  @@index([reportedUserId])
 }

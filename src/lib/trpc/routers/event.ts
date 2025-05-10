@@ -49,32 +49,32 @@ export const eventRouter = router({
       const { limit = 10, cursor, filters } = input || {};
       const now = new Date();
 
-      // Build filter conditions
-      const where = {
-        // For public events or events the user is invited to
-        OR: [
-          { isPrivate: false },
-          ...(session?.user
-            ? [{ participants: { some: { userId: session.user.id } } }]
-            : []),
-        ],
-        ...(filters?.upcoming ? { startsAt: { gte: now } } : {}),
-        ...(filters?.categoryId ? { categoryId: filters.categoryId } : {}),
-        ...(filters?.isOnline !== undefined ? { isOnline: filters.isOnline } : {}),
-        ...(filters?.startDate ? { startsAt: { gte: filters.startDate } } : {}),
-        ...(filters?.endDate ? { startsAt: { lte: filters.endDate } } : {}),
-        ...(filters?.searchQuery
-          ? {
-              OR: [
-                { title: { contains: filters.searchQuery, mode: 'insensitive' } },
-                { description: { contains: filters.searchQuery, mode: 'insensitive' } },
-                { location: { contains: filters.searchQuery, mode: 'insensitive' } },
-              ],
-            }
-          : {}),
-      };
-
       try {
+        // Build filter conditions
+        const where = {
+          // For public events or events the user is invited to
+          OR: [
+            { isPrivate: false },
+            ...(session?.user
+              ? [{ participants: { some: { userId: session.user.id } } }]
+              : []),
+          ],
+          ...(filters?.upcoming ? { startsAt: { gte: now } } : {}),
+          ...(filters?.categoryId ? { categoryId: filters.categoryId } : {}),
+          ...(filters?.isOnline !== undefined ? { isOnline: filters.isOnline } : {}),
+          ...(filters?.startDate ? { startsAt: { gte: filters.startDate } } : {}),
+          ...(filters?.endDate ? { startsAt: { lte: filters.endDate } } : {}),
+          ...(filters?.searchQuery
+            ? {
+                OR: [
+                  { title: { contains: filters.searchQuery, mode: 'insensitive' } },
+                  { description: { contains: filters.searchQuery, mode: 'insensitive' } },
+                  { location: { contains: filters.searchQuery, mode: 'insensitive' } },
+                ],
+              }
+            : {}),
+        };
+
         // Get events with pagination
         const events = await db.event.findMany({
           where,
@@ -121,25 +121,50 @@ export const eventRouter = router({
           },
         });
 
-        // Check if the current user is participating in these events
-        let eventsWithParticipation = events;
-        if (session?.user) {
-          const eventIds = events.map((event) => event.id);
-          const userParticipations = await db.eventParticipation.findMany({
-            where: {
-              eventId: { in: eventIds },
-              userId: session.user.id,
-            },
-          });
+        // Get user participation statuses using direct SQL to avoid the missing column error
+        let eventsWithParticipation = [...events];
 
-          const participationMap = new Map(
-            userParticipations.map((p) => [p.eventId, p.status])
-          );
+        if (session?.user && events.length > 0) {
+          try {
+            // Get the event IDs
+            const eventIds = events.map(event => event.id);
 
-          eventsWithParticipation = events.map((event) => ({
-            ...event,
-            userParticipationStatus: participationMap.get(event.id) || null,
-          }));
+            // Use raw SQL query if needed (avoiding updatedAt)
+            const query = `
+              SELECT "eventId", "status"
+              FROM "EventParticipation"
+              WHERE "userId" = $1 AND "eventId" IN (${eventIds.map((_, i) => `$${i + 2}`).join(', ')})
+            `;
+
+            // Execute the query with parameters
+            const result = await db.$queryRaw`
+              SELECT "eventId", "status"
+              FROM "EventParticipation"
+              WHERE "userId" = ${session.user.id}
+              AND "eventId" IN (${db.$join(eventIds)})
+            `;
+
+            // Cast the result to the expected type
+            const userParticipations = result as { eventId: string, status: string }[];
+
+            // Create a map for lookups
+            const participationMap = new Map(
+              userParticipations.map(p => [p.eventId, p.status])
+            );
+
+            // Add participation status to events
+            eventsWithParticipation = events.map(event => ({
+              ...event,
+              userParticipationStatus: participationMap.get(event.id) || null,
+            }));
+          } catch (err) {
+            console.error("Error fetching user participations:", err);
+            // If there's an error, continue with the events without participation status
+            eventsWithParticipation = events.map(event => ({
+              ...event,
+              userParticipationStatus: null,
+            }));
+          }
         }
 
         // Handle pagination
@@ -737,7 +762,10 @@ export const eventRouter = router({
           // Update existing participation
           await db.eventParticipation.update({
             where: { id: existingParticipation.id },
-            data: { status },
+            data: {
+              status
+              // Remove updatedAt field since it doesn't exist in the database
+            },
           });
         } else {
           // Create new participation
@@ -746,6 +774,7 @@ export const eventRouter = router({
               eventId,
               userId: session.user.id,
               status,
+              // Remove updatedAt field since it doesn't exist in the database
             },
           });
         }
@@ -820,6 +849,7 @@ export const eventRouter = router({
             eventId,
             userId,
             status: ParticipationStatus.INVITED,
+            // Remove updatedAt field since it doesn't exist in the database
           })),
         });
 
