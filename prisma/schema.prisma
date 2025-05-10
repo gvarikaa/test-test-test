@@ -78,6 +78,26 @@ model User {
   ownedPages     Page[]          @relation("PageOwner")
   pageRoles      PageRole[]
 
+  // Groups
+  createdGroups          Group[]             @relation("GroupCreator")
+  groupMemberships       GroupMember[]
+  groupInvitations       GroupInvitation[]   @relation("InvitedUser")
+  sentGroupInvitations   GroupInvitation[]   @relation("InvitingUser")
+  groupJoinRequests      GroupJoinRequest[]
+  groupPosts             GroupPost[]
+  groupComments          GroupComment[]
+  groupReactions         GroupReaction[]
+  groupFileUploads       GroupFile[]         @relation("FileUploader")
+  groupDiscussionTopics  GroupDiscussionTopic[] @relation("TopicCreator")
+  groupDiscussionReplies GroupDiscussionReply[] @relation("ReplyCreator")
+  groupEvents            GroupEvent[]        @relation("EventCreator")
+  groupEventParticipations GroupEventParticipation[]
+  groupPolls             GroupPoll[]         @relation("PollCreator")
+  groupPollVotes         GroupPollVote[]
+  groupBadges            GroupBadge[]
+  groupReports           GroupReport[]       @relation("ReportCreator")
+  groupReportedContent   GroupReport[]       @relation("ReportedUser")
+
   // Events
   createdEvents  Event[]
   eventParticipations EventParticipation[]
@@ -785,4 +805,508 @@ enum ParticipationStatus {
   MAYBE
   INVITED
   DECLINED
+}
+
+//
+// Group Models
+//
+
+// Group visibility types
+enum GroupPrivacy {
+  PUBLIC     // Anyone can see and join
+  PRIVATE    // Anyone can see, but requires approval to join
+  SECRET     // Only visible to members, requires invitation to join
+}
+
+// Group member role
+enum GroupRole {
+  OWNER       // Owner/Creator of the group
+  ADMIN       // Admin with full permissions
+  MODERATOR   // Can moderate content
+  MEMBER      // Regular member
+}
+
+// Group content status
+enum GroupContentStatus {
+  PUBLISHED   // Approved and visible
+  PENDING     // Pending moderation
+  REJECTED    // Rejected by moderators
+  ARCHIVED    // Archived/hidden
+}
+
+// Report status
+enum ReportStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  RESOLVED
+}
+
+// Report type
+enum ReportType {
+  SPAM
+  HARASSMENT
+  HATE_SPEECH
+  MISINFORMATION
+  INAPPROPRIATE_CONTENT
+  OTHER
+}
+
+// Main Group model
+model Group {
+  id                  String       @id @default(cuid())
+  name                String
+  handle              String       @unique
+  description         String?      @db.Text
+  privacy             GroupPrivacy @default(PUBLIC)
+  rules               String?      @db.Text
+  logoImage           String?
+  coverImage          String?
+  isVerified          Boolean      @default(false)
+  autoApproveMembers  Boolean      @default(true)
+  allowMemberPosts    Boolean      @default(true)
+  requirePostApproval Boolean      @default(false)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  // Group creator
+  creatorId           String
+  creator             User         @relation("GroupCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  // Group relationships
+  members             GroupMember[]
+  invitations         GroupInvitation[]
+  joinRequests        GroupJoinRequest[]
+  posts               GroupPost[]
+  topics              GroupTopic[]
+  discussionTopics    GroupDiscussionTopic[]
+  files               GroupFile[]
+  events              GroupEvent[]
+  polls               GroupPoll[]
+  badges              GroupBadge[]
+  reports             GroupReport[]
+
+  // Group settings
+  settings            GroupSettings?
+
+  @@index([creatorId])
+}
+
+// Group settings
+model GroupSettings {
+  id                        String    @id @default(cuid())
+  welcomeMessage            String?   @db.Text
+  primaryColor              String?
+  enableMemberList          Boolean   @default(true)
+  enableDiscussions         Boolean   @default(true)
+  enableFiles               Boolean   @default(true)
+  enableEvents              Boolean   @default(true)
+  enablePolls               Boolean   @default(true)
+  postNotificationsEnabled  Boolean   @default(true)
+  commentNotificationsEnabled Boolean  @default(true)
+  eventNotificationsEnabled Boolean   @default(true)
+  allowNonMemberView        Boolean   @default(true)
+
+  // Group relationship
+  groupId                   String    @unique
+  group                     Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+}
+
+// Group topics/categories
+model GroupTopic {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?
+  color         String?
+  icon          String?
+  createdAt     DateTime  @default(now())
+
+  groupId       String
+  group         Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  // Related content
+  posts         GroupPost[]
+
+  @@unique([groupId, name])
+  @@index([groupId])
+}
+
+// Group membership
+model GroupMember {
+  id            String     @id @default(cuid())
+  role          GroupRole  @default(MEMBER)
+  joinedAt      DateTime   @default(now())
+  lastActive    DateTime   @default(now())
+  isActive      Boolean    @default(true)
+  reputation    Int        @default(0)
+  notes         String?
+
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  groupId       String
+  group         Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  // Member badges
+  badges        GroupBadgeAssignment[]
+
+  @@unique([groupId, userId])
+  @@index([userId])
+  @@index([groupId])
+}
+
+// Group invitation
+model GroupInvitation {
+  id            String    @id @default(cuid())
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime?
+  message       String?
+  status        String    @default("PENDING") // PENDING, ACCEPTED, REJECTED
+
+  groupId       String
+  group         Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  invitedById   String
+  invitedBy     User      @relation("InvitingUser", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  invitedUserId String
+  invitedUser   User      @relation("InvitedUser", fields: [invitedUserId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([invitedUserId])
+  @@index([invitedById])
+}
+
+// Group join requests
+model GroupJoinRequest {
+  id            String    @id @default(cuid())
+  message       String?
+  status        String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  groupId       String
+  group         Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([groupId])
+}
+
+// Group posts
+model GroupPost {
+  id            String              @id @default(cuid())
+  content       String              @db.Text
+  status        GroupContentStatus  @default(PUBLISHED)
+  isPinned      Boolean             @default(false)
+  isAnnouncement Boolean            @default(false)
+  isEdited      Boolean             @default(false)
+  viewCount     Int                 @default(0)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  userId        String
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  groupId       String
+  group         Group               @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  topicId       String?
+  topic         GroupTopic?         @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  // Related content
+  media         Media[]
+  comments      GroupComment[]
+  reactions     GroupReaction[]
+
+  @@index([userId])
+  @@index([groupId])
+  @@index([topicId])
+}
+
+// Group comments
+model GroupComment {
+  id            String              @id @default(cuid())
+  content       String
+  status        GroupContentStatus  @default(PUBLISHED)
+  isEdited      Boolean             @default(false)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  userId        String
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  postId        String
+  post          GroupPost           @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  parentId      String?
+  parent        GroupComment?       @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies       GroupComment[]      @relation("CommentReplies")
+
+  reactions     GroupReaction[]
+
+  @@index([userId])
+  @@index([postId])
+  @@index([parentId])
+}
+
+// Group reactions
+model GroupReaction {
+  id            String       @id @default(cuid())
+  type          ReactionType
+  createdAt     DateTime     @default(now())
+
+  userId        String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  postId        String?
+  post          GroupPost?   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  commentId     String?
+  comment       GroupComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId, commentId])
+  @@index([userId])
+  @@index([postId])
+  @@index([commentId])
+}
+
+// Group discussions (forum)
+model GroupDiscussionTopic {
+  id            String      @id @default(cuid())
+  title         String
+  content       String      @db.Text
+  isLocked      Boolean     @default(false)
+  isPinned      Boolean     @default(false)
+  viewCount     Int         @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  creatorId     String
+  creator       User        @relation("TopicCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  groupId       String
+  group         Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  replies       GroupDiscussionReply[]
+
+  @@index([creatorId])
+  @@index([groupId])
+}
+
+// Group discussion replies
+model GroupDiscussionReply {
+  id            String      @id @default(cuid())
+  content       String      @db.Text
+  isEdited      Boolean     @default(false)
+  isAcceptedAnswer Boolean  @default(false)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  creatorId     String
+  creator       User        @relation("ReplyCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  topicId       String
+  topic         GroupDiscussionTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  parentId      String?
+  parent        GroupDiscussionReply? @relation("ReplyReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies       GroupDiscussionReply[] @relation("ReplyReplies")
+
+  @@index([creatorId])
+  @@index([topicId])
+  @@index([parentId])
+}
+
+// Group files
+model GroupFile {
+  id            String      @id @default(cuid())
+  name          String
+  description   String?
+  fileType      String?
+  fileSize      Int?
+  fileUrl       String
+  thumbnailUrl  String?
+  downloadCount Int         @default(0)
+  createdAt     DateTime    @default(now())
+
+  uploaderId    String
+  uploader      User        @relation("FileUploader", fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  groupId       String
+  group         Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([uploaderId])
+  @@index([groupId])
+}
+
+// Group events
+model GroupEvent {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?   @db.Text
+  location      String?
+  isOnline      Boolean   @default(false)
+  onlineUrl     String?
+  startsAt      DateTime
+  endsAt        DateTime?
+  coverImage    String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  creatorId     String
+  creator       User      @relation("EventCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  groupId       String
+  group         Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  participants  GroupEventParticipation[]
+
+  @@index([creatorId])
+  @@index([groupId])
+}
+
+// Group event participation
+model GroupEventParticipation {
+  id            String              @id @default(cuid())
+  status        ParticipationStatus @default(GOING)
+  createdAt     DateTime            @default(now())
+
+  eventId       String
+  event         GroupEvent          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  userId        String
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+}
+
+// Group polls
+model GroupPoll {
+  id            String    @id @default(cuid())
+  question      String
+  description   String?
+  isMultiChoice Boolean   @default(false)
+  isAnonymous   Boolean   @default(false)
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  creatorId     String
+  creator       User      @relation("PollCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  groupId       String
+  group         Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  options       GroupPollOption[]
+  votes         GroupPollVote[]
+
+  @@index([creatorId])
+  @@index([groupId])
+}
+
+// Group poll options
+model GroupPollOption {
+  id            String    @id @default(cuid())
+  text          String
+
+  pollId        String
+  poll          GroupPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  votes         GroupPollVote[]
+
+  @@index([pollId])
+}
+
+// Group poll votes
+model GroupPollVote {
+  id            String    @id @default(cuid())
+  createdAt     DateTime  @default(now())
+
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  pollId        String
+  poll          GroupPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  optionId      String
+  option        GroupPollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pollId, optionId])
+  @@index([userId])
+  @@index([pollId])
+  @@index([optionId])
+}
+
+// Group badge system
+model GroupBadge {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?
+  image         String?
+  criteria      String?
+  points        Int       @default(0)
+  createdAt     DateTime  @default(now())
+
+  userId        String?
+  user          User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  groupId       String
+  group         Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  assignments   GroupBadgeAssignment[]
+
+  @@index([userId])
+  @@index([groupId])
+}
+
+// Group badge assignments to members
+model GroupBadgeAssignment {
+  id            String    @id @default(cuid())
+  awardedAt     DateTime  @default(now())
+  reason        String?
+
+  badgeId       String
+  badge         GroupBadge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  memberId      String
+  member        GroupMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([badgeId, memberId])
+  @@index([badgeId])
+  @@index([memberId])
+}
+
+// Group report system
+model GroupReport {
+  id            String      @id @default(cuid())
+  type          ReportType
+  reason        String
+  status        ReportStatus @default(PENDING)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  resolvedAt    DateTime?
+
+  // Reporter
+  creatorId     String
+  creator       User        @relation("ReportCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  // Group
+  groupId       String
+  group         Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  // Reported content references (only one will be set)
+  reportedUserId String?
+  reportedUser   User?      @relation("ReportedUser", fields: [reportedUserId], references: [id], onDelete: SetNull)
+
+  // Other reportable content IDs
+  postId        String?
+  commentId     String?
+
+  @@index([creatorId])
+  @@index([groupId])
+  @@index([reportedUserId])
 }

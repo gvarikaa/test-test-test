@@ -1,2 +1,7 @@
 /* tailwind config path: ../tailwind.config.mjs */
 @import "tailwindcss";
+
+/* Fix for select dropdown options */
+option {
+  @apply text-black bg-white dark:text-white dark:bg-gray-800;
+}
