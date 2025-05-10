@@ -2,6 +2,7 @@ import { PrismaClient, Visibility, MediaType } from '@prisma/client';
 import { hash } from 'bcrypt';
 import { seedReelData } from './seeds/reels.js';
 import { seedEvents } from './seeds/events';
+import { seedEventCategories } from './seeds/event-categories';
 
 const prisma = new PrismaClient();
 
@@ -401,6 +402,9 @@ async function main() {
   await seedReelData(prisma);
 
   // Seed event categories
+  await seedEventCategories(prisma);
+
+  // Seed events
   await seedEvents(prisma);
 
   console.log('Seed completed successfully!');

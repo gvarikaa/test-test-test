@@ -6,38 +6,63 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, isSa
 import Link from 'next/link';
 import Image from 'next/image';
 
+type CalendarEvent = {
+  id: string;
+  title: string;
+  start: Date;
+  end?: Date;
+  location?: string | null;
+  isOnline: boolean;
+  creator: {
+    id: string;
+    name: string | null;
+    username: string | null;
+    image: string | null;
+  };
+  coverImage?: string | null;
+  participantCount: number;
+  isPrivate?: boolean;
+  isRecurring?: boolean;
+  category?: {
+    id: string;
+    name: string;
+    color?: string | null;
+    icon?: string | null;
+  } | null;
+};
+
 export default function EventCalendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  
+
   // Calculate the month boundaries for the query
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
   const calendarStart = startOfWeek(monthStart);
   const calendarEnd = endOfWeek(monthEnd);
-  
+
   // Fetch events for the visible calendar period
-  const { data: calendarData } = trpc.event.getCalendarEvents.useQuery({
+  const { data: calendarData = [] } = trpc.event.getCalendarEvents.useQuery({
     startDate: calendarStart,
     endDate: calendarEnd,
   });
-  
+
   // Group events by date for easy access
-  const eventsByDate = new Map();
+  const eventsByDate = new Map<string, CalendarEvent[]>();
   calendarData?.forEach(event => {
     const dateKey = format(new Date(event.start), 'yyyy-MM-dd');
     if (!eventsByDate.has(dateKey)) {
       eventsByDate.set(dateKey, []);
     }
-    eventsByDate.get(dateKey).push(event);
+    eventsByDate.get(dateKey)?.push(event);
   });
-  
+
   // Helper to get events for a specific day
   const getEventsForDay = (date: Date) => {
     const dateKey = format(date, 'yyyy-MM-dd');
     return eventsByDate.get(dateKey) || [];
   };
-  
+
   const renderHeader = () => {
     return (
       <div className="flex items-center justify-between mb-4">
@@ -63,13 +88,13 @@ export default function EventCalendar() {
       </div>
     );
   };
-  
+
   const renderDays = () => {
     const days = [];
     const dateFormat = 'EEEE';
-    
+
     let startDate = startOfWeek(monthStart);
-    
+
     for (let i = 0; i < 7; i++) {
       days.push(
         <div key={i} className="text-center font-semibold py-2 text-sm text-gray-600 dark:text-gray-300">
@@ -77,29 +102,57 @@ export default function EventCalendar() {
         </div>
       );
     }
-    
+
     return <div className="grid grid-cols-7 mb-2">{days}</div>;
   };
-  
+
+  const renderEventIndicator = (event: CalendarEvent) => {
+    // If event has a category with a color, use that color
+    const baseStyle = "h-2 rounded-sm";
+    if (event.category?.color) {
+      return (
+        <div
+          className={baseStyle}
+          style={{ backgroundColor: event.category.color }}
+        ></div>
+      );
+    }
+
+    // Otherwise use standard styling based on event properties
+    if (event.isPrivate) {
+      return <div className={`${baseStyle} bg-gray-600`}></div>;
+    }
+
+    if (event.isRecurring) {
+      return <div className={`${baseStyle} bg-purple-500`}></div>;
+    }
+
+    if (event.isOnline) {
+      return <div className={`${baseStyle} bg-accent-blue`}></div>;
+    }
+
+    return <div className={`${baseStyle} bg-green-500`}></div>;
+  };
+
   const renderCells = () => {
     const monthStart = startOfMonth(currentDate);
     const monthEnd = endOfMonth(monthStart);
     const startDate = startOfWeek(monthStart);
     const endDate = endOfWeek(monthEnd);
-    
+
     const dateFormat = 'd';
     const rows = [];
-    
+
     let days = [];
     let day = startDate;
     let formattedDate = '';
-    
+
     while (day <= endDate) {
       for (let i = 0; i < 7; i++) {
         formattedDate = format(day, dateFormat);
         const cloneDay = day;
         const eventsForDay = getEventsForDay(day);
-        
+
         days.push(
           <div
             key={day.toString()}
@@ -124,23 +177,28 @@ export default function EventCalendar() {
               >
                 {formattedDate}
               </span>
-              
+
               {eventsForDay.length > 3 && (
                 <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
                   +{eventsForDay.length - 2} more
                 </span>
               )}
             </div>
-            
+
             <div className="mt-1 space-y-1 overflow-hidden">
-              {eventsForDay.slice(0, 3).map((event, index) => (
+              {eventsForDay.slice(0, 3).map((event) => (
                 <Link
                   key={event.id}
                   href={`/events/${event.id}`}
-                  className="block text-xs truncate py-1 px-1.5 rounded bg-accent-blue/10 text-accent-blue dark:bg-accent-blue/20 hover:bg-accent-blue/20"
+                  className="block text-xs truncate px-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {format(new Date(event.start), 'HH:mm')} {event.title}
+                  <div className="flex items-center gap-1">
+                    {renderEventIndicator(event)}
+                    <div className="truncate">
+                      <span className="font-medium">{format(new Date(event.start), 'HH:mm')}</span> {event.title}
+                    </div>
+                  </div>
                 </Link>
               ))}
             </div>
@@ -148,7 +206,7 @@ export default function EventCalendar() {
         );
         day = addDays(day, 1);
       }
-      
+
       rows.push(
         <div key={day.toString()} className="grid grid-cols-7">
           {days}
@@ -156,15 +214,15 @@ export default function EventCalendar() {
       );
       days = [];
     }
-    
+
     return <div className="grid mb-6">{rows}</div>;
   };
-  
+
   const renderSelectedDateEvents = () => {
     if (!selectedDate) return null;
-    
+
     const eventsForSelectedDate = getEventsForDay(selectedDate);
-    
+
     if (eventsForSelectedDate.length === 0) {
       return (
         <div className="mt-4 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
@@ -175,18 +233,18 @@ export default function EventCalendar() {
         </div>
       );
     }
-    
+
     return (
       <div className="mt-4 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
         <h3 className="text-lg font-medium mb-4 text-gray-900 dark:text-white">
           {format(selectedDate, 'EEEE, MMMM d, yyyy')}
         </h3>
-        
+
         <div className="space-y-3">
           {eventsForSelectedDate.map((event) => (
-            <Link 
+            <Link
               href={`/events/${event.id}`}
-              key={event.id} 
+              key={event.id}
               className="flex items-start p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
             >
               {/* Time column */}
@@ -198,15 +256,15 @@ export default function EventCalendar() {
                   {format(new Date(event.start), 'a')}
                 </div>
               </div>
-              
+
               {/* Event details */}
               <div className="flex-1">
                 <div className="flex items-start space-x-3">
                   {/* Event image */}
                   <div className="relative w-10 h-10 rounded-md overflow-hidden bg-gray-200 dark:bg-gray-700 flex-shrink-0">
                     {event.coverImage ? (
-                      <Image 
-                        src={event.coverImage} 
+                      <Image
+                        src={event.coverImage}
                         alt={event.title}
                         fill
                         className="object-cover"
@@ -217,13 +275,52 @@ export default function EventCalendar() {
                       </div>
                     )}
                   </div>
-                  
+
                   {/* Event info */}
                   <div className="flex-1">
-                    <h4 className="text-sm font-medium text-gray-900 dark:text-white">
-                      {event.title}
-                    </h4>
-                    
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+                        {event.title}
+                      </h4>
+
+                      {/* Event badges */}
+                      <div className="flex space-x-1">
+                        {event.isPrivate && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 mr-0.5">
+                              <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clipRule="evenodd" />
+                            </svg>
+                            Private
+                          </span>
+                        )}
+
+                        {event.isRecurring && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 mr-0.5">
+                              <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM12.75 6a.75.75 0 00-1.5 0v6c0 .414.336.75.75.75h4.5a.75.75 0 000-1.5h-3.75V6z" clipRule="evenodd" />
+                            </svg>
+                            Recurring
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Category */}
+                    {event.category && (
+                      <div className="mt-1">
+                        <span
+                          className="inline-block px-2 py-0.5 text-xs rounded-full"
+                          style={{
+                            backgroundColor: event.category.color ? `${event.category.color}20` : '#e5e7eb',
+                            color: event.category.color || '#4b5563'
+                          }}
+                        >
+                          {event.category.icon && <span className="mr-1">{event.category.icon}</span>}
+                          {event.category.name}
+                        </span>
+                      </div>
+                    )}
+
                     <div className="mt-1 flex items-center text-xs text-gray-500 dark:text-gray-400">
                       {event.isOnline ? (
                         <span className="flex items-center">
@@ -241,9 +338,9 @@ export default function EventCalendar() {
                           {event.location}
                         </span>
                       ) : null}
-                      
+
                       <span className="mx-2">•</span>
-                      
+
                       {/* Participants count */}
                       <span className="flex items-center">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 mr-1">

@@ -19,6 +19,9 @@ type EventCardProps = {
     startsAt: Date;
     endsAt?: Date | null;
     coverImage?: string | null;
+    isPrivate: boolean;
+    isRecurring: boolean;
+    maxParticipants?: number | null;
     userParticipationStatus?: ParticipationStatus | null;
     creator: {
       id: string;
@@ -26,6 +29,18 @@ type EventCardProps = {
       username: string | null;
       image: string | null;
     };
+    category?: {
+      id: string;
+      name: string;
+      color?: string | null;
+      icon?: string | null;
+    } | null;
+    eventTags?: Array<{
+      tag: {
+        id: string;
+        name: string;
+      }
+    }>;
     _count: {
       participants: number;
     };
@@ -36,7 +51,7 @@ type EventCardProps = {
 export default function EventCard({ event, showActions = true }: EventCardProps) {
   const { data: session } = useSession();
   const [isExpanded, setIsExpanded] = useState(false);
-  
+
   const utils = trpc.useUtils();
   const respondToEvent = trpc.event.respondToEvent.useMutation({
     onSuccess: () => {
@@ -45,19 +60,19 @@ export default function EventCard({ event, showActions = true }: EventCardProps)
     },
   });
 
-  const isCreator = session?.user?.id === event.creator.id;
+  const isCreator = session?.user?.id === event?.creator?.id;
   const startDate = format(new Date(event.startsAt), 'MMM d, yyyy');
   const startTime = format(new Date(event.startsAt), 'h:mm a');
-  
+
   const handleResponse = (status: ParticipationStatus) => {
     if (!session?.user) return;
-    
+
     respondToEvent.mutate({
       eventId: event.id,
       status,
     });
   };
-  
+
   // Function to get status style
   const getStatusStyle = (status: ParticipationStatus | null | undefined) => {
     switch (status) {
@@ -90,21 +105,44 @@ export default function EventCard({ event, showActions = true }: EventCardProps)
             <span className="text-white text-2xl font-bold">{event.title.charAt(0)}</span>
           </div>
         )}
-        
+
         {/* Date overlay */}
         <div className="absolute top-2 left-2 bg-white dark:bg-gray-800 rounded-md shadow-md p-2 text-center min-w-[60px]">
           <div className="text-sm font-bold text-accent-blue">{format(new Date(event.startsAt), 'MMM')}</div>
           <div className="text-xl font-bold">{format(new Date(event.startsAt), 'd')}</div>
         </div>
-        
-        {/* Status badge if user is participating */}
-        {event.userParticipationStatus && (
-          <div className={`absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-medium ${getStatusStyle(event.userParticipationStatus)}`}>
-            {event.userParticipationStatus}
-          </div>
-        )}
+
+        {/* Badges container - right side */}
+        <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
+          {/* Status badge if user is participating */}
+          {event.userParticipationStatus && (
+            <div className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusStyle(event.userParticipationStatus)}`}>
+              {event.userParticipationStatus}
+            </div>
+          )}
+
+          {/* Private event badge */}
+          {event.isPrivate && (
+            <div className="px-2 py-1 rounded-full text-xs font-medium bg-gray-800 text-white flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 mr-1">
+                <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clipRule="evenodd" />
+              </svg>
+              Private
+            </div>
+          )}
+
+          {/* Recurring event badge */}
+          {event.isRecurring && (
+            <div className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 mr-1">
+                <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM12.75 6a.75.75 0 00-1.5 0v6c0 .414.336.75.75.75h4.5a.75.75 0 000-1.5h-3.75V6z" clipRule="evenodd" />
+              </svg>
+              Recurring
+            </div>
+          )}
+        </div>
       </div>
-      
+
       {/* Event details */}
       <div className="p-4">
         <div className="flex justify-between items-start">
@@ -114,19 +152,48 @@ export default function EventCard({ event, showActions = true }: EventCardProps)
               {startDate} at {startTime}
             </div>
           </div>
-          
+
           {/* Creator info */}
-          <Link href={`/profile/${event.creator.id}`} className="flex items-center">
-            <Image
-              src={event.creator.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(event.creator.name || 'User')}`}
-              width={24}
-              height={24}
-              alt={event.creator.name || 'User'}
-              className="rounded-full"
-            />
-          </Link>
+          {event.creator && event.creator.id && (
+            <Link href={`/profile/${event.creator.id}`} className="flex items-center">
+              <Image
+                src={event.creator.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(event.creator.name || 'User')}`}
+                width={24}
+                height={24}
+                alt={event.creator.name || 'User'}
+                className="rounded-full"
+              />
+            </Link>
+          )}
         </div>
-        
+
+        {/* Category & Tags */}
+        {(event.category || (event.eventTags && event.eventTags.length > 0)) && (
+          <div className="flex flex-wrap gap-1 my-2">
+            {event.category && event.category.id && (
+              <span
+                className="inline-block px-2 py-1 text-xs rounded-full"
+                style={{
+                  backgroundColor: event.category.color ? `${event.category.color}20` : '#e5e7eb',
+                  color: event.category.color || '#4b5563'
+                }}
+              >
+                {event.category.icon && <span className="mr-1">{event.category.icon}</span>}
+                {event.category.name || 'Uncategorized'}
+              </span>
+            )}
+
+            {event.eventTags && event.eventTags.map(({ tag }) => tag && tag.id ? (
+              <span
+                key={tag.id}
+                className="inline-block px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+              >
+                #{tag.name || 'unnamed'}
+              </span>
+            ) : null)}
+          </div>
+        )}
+
         {/* Location */}
         <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 mb-3">
           {event.isOnline ? (
@@ -146,7 +213,7 @@ export default function EventCard({ event, showActions = true }: EventCardProps)
             </>
           ) : null}
         </div>
-        
+
         {/* Description - collapsible */}
         {event.description && (
           <div className="mt-2">
@@ -163,12 +230,20 @@ export default function EventCard({ event, showActions = true }: EventCardProps)
             )}
           </div>
         )}
-        
+
         {/* Participants count */}
-        <div className="mt-3 text-sm text-gray-500 dark:text-gray-400">
-          {event._count.participants} {event._count.participants === 1 ? 'person' : 'people'} going
+        <div className="mt-3 text-sm text-gray-500 dark:text-gray-400 flex items-center justify-between">
+          <span>
+            {event._count?.participants || 0} {(event._count?.participants || 0) === 1 ? 'person' : 'people'} going
+          </span>
+
+          {event.maxParticipants && (
+            <span className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full">
+              {event._count?.participants || 0}/{event.maxParticipants} spots
+            </span>
+          )}
         </div>
-        
+
         {/* Action buttons */}
         {showActions && session?.user && !isCreator && (
           <div className="mt-4 flex space-x-2">
@@ -179,6 +254,7 @@ export default function EventCard({ event, showActions = true }: EventCardProps)
                   ? 'bg-green-500 text-white'
                   : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
               }`}
+              disabled={event.maxParticipants !== null && (event._count?.participants || 0) >= (event.maxParticipants || 0) && event.userParticipationStatus !== 'GOING'}
             >
               Going
             </button>
@@ -204,7 +280,7 @@ export default function EventCard({ event, showActions = true }: EventCardProps)
             </button>
           </div>
         )}
-        
+
         {/* View details link */}
         <div className="mt-4">
           <Link

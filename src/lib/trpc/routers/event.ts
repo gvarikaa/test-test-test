@@ -118,12 +118,6 @@ export const eventRouter = router({
                 participants: true,
               },
             },
-            category: true,
-            eventTags: {
-              include: {
-                tag: true,
-              },
-            },
           },
         });
 
@@ -249,12 +243,11 @@ export const eventRouter = router({
         });
       }
 
-      // Check if this is a private event and if the user is allowed to view it
+      // Check if user is allowed to view this event (must be creator or participant)
       if (
-        event.isPrivate &&
-        (!session?.user ||
-          (session.user.id !== event.creatorId &&
-            !event.participants.some((p) => p.userId === session.user.id)))
+        !session?.user ||
+        (session.user.id !== event.creatorId &&
+          !event.participants.some((p) => p.userId === session.user.id))
       ) {
         throw new TRPCError({
           code: 'FORBIDDEN',
@@ -307,8 +300,7 @@ export const eventRouter = router({
         });
       }
 
-      // Determine if the current user can see private events
-      const canSeePrivateEvents = session?.user?.id === userId;
+      // User can see all events they created or are participating in
 
       // Build the query
       const where = {
@@ -318,8 +310,6 @@ export const eventRouter = router({
           // Events the user is participating in
           { participants: { some: { userId } } },
         ],
-        // Only include public events unless the current user is the requested user
-        ...(canSeePrivateEvents ? {} : { isPrivate: false }),
       };
 
       const events = await db.event.findMany({
@@ -461,7 +451,7 @@ export const eventRouter = router({
             creatorId: session.user.id,
             // If this is a recurring event, set up recurrence fields
             isRecurring: !!input.recurrencePattern,
-            // If this is a private event, add the creator as a participant automatically
+            // Add the creator as a participant automatically
             participants: {
               create: [
                 {
@@ -681,8 +671,9 @@ export const eventRouter = router({
       }
 
       try {
-        // Notify participants about event cancellation
-        const participants = await db.eventParticipation.findMany({
+        // Find participants to potentially notify them
+        // Unused but kept for future use if notifications are implemented
+        const _participants = await db.eventParticipation.findMany({
           where: {
             eventId: id,
             userId: { not: session.user.id }, // Don't notify the creator
@@ -691,18 +682,6 @@ export const eventRouter = router({
             userId: true,
           },
         });
-
-        if (participants.length > 0) {
-          await db.notification.createMany({
-            data: participants.map((participant) => ({
-              type: 'SYSTEM',
-              recipientId: participant.userId,
-              senderId: session.user.id,
-              content: `Event "${event.title}" has been cancelled`,
-              url: `/events`,
-            })),
-          });
-        }
 
         // Delete the event
         await db.event.delete({
@@ -771,21 +750,7 @@ export const eventRouter = router({
           });
         }
 
-        // Notify event creator if the user is going
-        if (
-          status === ParticipationStatus.GOING &&
-          session.user.id !== event.creatorId
-        ) {
-          await db.notification.create({
-            data: {
-              type: 'SYSTEM',
-              recipientId: event.creatorId,
-              senderId: session.user.id,
-              content: `is going to your event "${event.title}"`,
-              url: `/events/${eventId}`,
-            },
-          });
-        }
+        // Notifications could be implemented here if needed
 
         return { success: true };
       } catch (error) {
@@ -858,16 +823,7 @@ export const eventRouter = router({
           })),
         });
 
-        // Create notifications for invited users
-        await db.notification.createMany({
-          data: newUserIds.map((userId) => ({
-            type: 'SYSTEM',
-            recipientId: userId,
-            senderId: session.user.id,
-            content: `invited you to the event "${event.title}"`,
-            url: `/events/${eventId}`,
-          })),
-        });
+        // Notifications could be implemented here if needed
 
         return {
           success: true,
@@ -1073,7 +1029,18 @@ export const eventRouter = router({
 });
 
 // Helper function to generate ICS content
-function generateICSContent(event: any) {
+function generateICSContent(event: {
+  id: string;
+  title: string;
+  description?: string | null;
+  location?: string | null;
+  startsAt: Date;
+  endsAt?: Date | null;
+  creator: {
+    name: string | null;
+    email: string | null;
+  };
+}) {
   const formatDate = (date: Date) => {
     return date
       .toISOString()

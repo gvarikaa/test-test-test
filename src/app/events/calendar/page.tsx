@@ -1,30 +1,29 @@
 "use client";
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import EventList from '../components/events/EventList';
+import { EventCalendar } from '../../components/events';
 
-export default function EventsPage() {
+export default function EventCalendarPage() {
   const { data: session } = useSession();
-
+  
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Events</h1>
-
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Event Calendar</h1>
+        
         <div className="flex space-x-2">
-          {/* Calendar view button */}
+          {/* List view button */}
           <Link
-            href="/events/calendar"
+            href="/events"
             className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 mr-1">
-              <path fillRule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0117.25 2.25c.41 0 .75.334.75.75V18a.75.75 0 01-1.5 0V4.5h-9V18a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zm4.5 10.5a.75.75 0 00-1.5 0v4.5a.75.75 0 001.5 0v-4.5zm3.75-1.5a.75.75 0 00-.75.75v4.5a.75.75 0 001.5 0v-4.5a.75.75 0 00-.75-.75z" clipRule="evenodd" />
+              <path fillRule="evenodd" d="M2.625 6.75a1.125 1.125 0 112.25 0 1.125 1.125 0 01-2.25 0zm4.875 0A.75.75 0 018.25 6h12a.75.75 0 010 1.5h-12a.75.75 0 01-.75-.75zM2.625 12a1.125 1.125 0 112.25 0 1.125 1.125 0 01-2.25 0zM7.5 12a.75.75 0 01.75-.75h12a.75.75 0 010 1.5h-12A.75.75 0 017.5 12zm-4.875 5.25a1.125 1.125 0 112.25 0 1.125 1.125 0 01-2.25 0zm4.875 0a.75.75 0 01.75-.75h12a.75.75 0 010 1.5h-12a.75.75 0 01-.75-.75z" clipRule="evenodd" />
             </svg>
-            Calendar
+            List View
           </Link>
-
+          
           {/* Create event button */}
           {session?.user && (
             <Link
@@ -39,8 +38,8 @@ export default function EventsPage() {
           )}
         </div>
       </div>
-
-      <EventList />
+      
+      <EventCalendar />
     </div>
   );
 }

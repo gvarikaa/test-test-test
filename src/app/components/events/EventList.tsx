@@ -7,8 +7,8 @@ import { format } from 'date-fns';
 
 type FilterOptions = {
   upcoming?: boolean;
-  categoryId?: string;
   isOnline?: boolean;
+  categoryId?: string;
   searchQuery?: string;
   startDate?: Date;
   endDate?: Date;
@@ -19,8 +19,8 @@ export default function EventList() {
     upcoming: true,
   });
   const [searchQuery, setSearchQuery] = useState('');
-  
-  const { data, isLoading, fetchNextPage, hasNextPage } = 
+
+  const { data, isLoading, fetchNextPage, hasNextPage } =
     trpc.event.getAll.useInfiniteQuery(
       {
         limit: 10,
@@ -33,11 +33,11 @@ export default function EventList() {
         getNextPageParam: (lastPage) => lastPage.nextCursor,
       }
     );
-    
-  const { data: categories } = trpc.event.getCategories.useQuery();
-  
+
+  const { data: categories = [] } = trpc.event.getCategories.useQuery();
+
   const events = data?.pages.flatMap((page) => page.events) || [];
-  
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setFilters((prev) => ({
@@ -45,26 +45,26 @@ export default function EventList() {
       searchQuery: searchQuery.length > 0 ? searchQuery : undefined,
     }));
   };
-  
+
   const handleCategoryFilter = (categoryId: string) => {
     setFilters((prev) => ({
       ...prev,
       categoryId: prev.categoryId === categoryId ? undefined : categoryId,
     }));
   };
-  
+
   const handleOnlineFilter = () => {
     setFilters((prev) => ({
       ...prev,
       isOnline: prev.isOnline === undefined ? true : undefined,
     }));
   };
-  
+
   const clearFilters = () => {
     setFilters({ upcoming: true });
     setSearchQuery('');
   };
-  
+
   const toggleUpcoming = () => {
     setFilters((prev) => ({
       ...prev,
@@ -95,7 +95,7 @@ export default function EventList() {
             </button>
           </div>
         </form>
-        
+
         <div className="flex flex-wrap gap-2">
           <button
             onClick={toggleUpcoming}
@@ -107,7 +107,7 @@ export default function EventList() {
           >
             Upcoming
           </button>
-          
+
           <button
             onClick={handleOnlineFilter}
             className={`px-3 py-1 rounded-full text-sm ${
@@ -118,22 +118,32 @@ export default function EventList() {
           >
             Online Only
           </button>
-          
-          {categories?.map((category) => (
-            <button
-              key={category.id}
-              onClick={() => handleCategoryFilter(category.id)}
-              className={`px-3 py-1 rounded-full text-sm ${
-                filters.categoryId === category.id
-                  ? 'bg-accent-blue text-white'
-                  : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
-              }`}
-            >
-              {category.name}
-            </button>
-          ))}
-          
-          {(filters.categoryId || filters.isOnline || searchQuery || !filters.upcoming) && (
+
+          {/* Category filters */}
+          {categories && categories.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2 w-full">
+              <span className="text-xs text-gray-500 dark:text-gray-400 w-full">Categories:</span>
+              {categories.map((category) => category && category.id ? (
+                <button
+                  key={category.id}
+                  onClick={() => handleCategoryFilter(category.id)}
+                  className={`px-3 py-1 rounded-full text-xs ${
+                    filters.categoryId === category.id
+                      ? 'bg-accent-blue text-white'
+                      : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
+                  }`}
+                  style={category.color ? { backgroundColor: filters.categoryId === category.id ? undefined : `${category.color}20`, color: filters.categoryId === category.id ? 'white' : category.color } : {}}
+                >
+                  {category.icon && (
+                    <span className="mr-1">{category.icon}</span>
+                  )}
+                  {category.name || 'Unnamed Category'}
+                </button>
+              ) : null)}
+            </div>
+          )}
+
+          {(filters.isOnline || filters.categoryId || searchQuery || !filters.upcoming) && (
             <button
               onClick={clearFilters}
               className="px-3 py-1 rounded-full text-sm bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200"
@@ -143,7 +153,7 @@ export default function EventList() {
           )}
         </div>
       </div>
-      
+
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[...Array(6)].map((_, i) => (
@@ -164,8 +174,8 @@ export default function EventList() {
           </svg>
           <h3 className="text-lg font-medium text-gray-900 dark:text-white">No events found</h3>
           <p className="text-gray-500 dark:text-gray-400 mt-2">
-            {Object.keys(filters).length > 1 || searchQuery 
-              ? 'Try changing your filters or search query' 
+            {Object.keys(filters).length > 1 || searchQuery
+              ? 'Try changing your filters or search query'
               : 'Be the first to create an event!'}
           </p>
           <button
@@ -180,11 +190,11 @@ export default function EventList() {
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {events.map((event) => (
+            {events.map((event) => event && event.id ? (
               <EventCard key={event.id} event={event} />
-            ))}
+            ) : null)}
           </div>
-          
+
           {hasNextPage && (
             <div className="text-center mt-6">
               <button

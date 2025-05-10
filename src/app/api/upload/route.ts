@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { MediaType } from "@prisma/client";
-import { uploadFileToBunny } from "@/lib/bunny";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth-options";
+import { StorageFactory, StorageProviderType } from "@/lib/storage/storage-factory";
 
 // Maximum file size (10MB)
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const mediaTypeParam = formData.get("mediaType") as MediaType | null;
+    const storageTypeParam = formData.get("storageType") as StorageProviderType | null;
 
     // Validate file
     if (!file) {
@@ -69,15 +70,24 @@ export async function POST(request: NextRequest) {
     // Determine the folder path based on media type
     const folderPath = `/${mediaType.toLowerCase()}s/${session.user.id}`;
     
-    // Upload the file to Bunny.net
-    const { url, thumbnailUrl } = await uploadFileToBunny(file, folderPath);
+    // Get the appropriate storage provider using the factory
+    // This is the key part that implements Dependency Inversion:
+    // We're depending on the StorageProvider interface, not the concrete implementation
+    const storageProvider = StorageFactory.getProvider(storageTypeParam || 'bunny');
+    
+    // Upload the file using the storage provider
+    const result = await storageProvider.uploadFile(
+      file, 
+      folderPath,
+      { contentType: file.type }
+    );
     
     // Return the URL of the uploaded file
     return NextResponse.json({
       message: "File uploaded successfully",
-      url,
+      url: result.url,
       mediaType,
-      thumbnailUrl,
+      thumbnailUrl: result.thumbnailUrl,
     });
   } catch (error: unknown) {
     console.error("Error uploading file:", error);
