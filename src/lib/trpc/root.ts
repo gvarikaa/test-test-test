@@ -6,6 +6,7 @@ import { notificationRouter } from './routers/notification';
 import { chatRouter } from './routers/chat';
 import { aiRouter } from './routers/ai';
 import { testRouter } from './routers/test';
+import { searchRouter } from './routers/search';
 
 export const appRouter = router({
   user: userRouter,
@@ -15,6 +16,7 @@ export const appRouter = router({
   chat: chatRouter,
   ai: aiRouter,
   test: testRouter,
+  search: searchRouter, // Add search router
 });
 
 export type AppRouter = typeof appRouter;

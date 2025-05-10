@@ -36,16 +36,23 @@ export enum PusherEvents {
   // Notification events
   NEW_NOTIFICATION = 'new-notification',
   READ_NOTIFICATION = 'read-notification',
-  
+  CLEAR_NOTIFICATIONS = 'clear-notifications',
+
   // Chat events
   NEW_MESSAGE = 'new-message',
   READ_MESSAGE = 'read-message',
   TYPING = 'typing',
   STOP_TYPING = 'stop-typing',
-  
+
   // Presence events
   USER_ONLINE = 'user-online',
   USER_OFFLINE = 'user-offline',
+
+  // Theme events
+  THEME_CHANGED = 'theme-changed',
+
+  // Language events
+  LANGUAGE_CHANGED = 'language-changed',
 }
 
 // Helper function to trigger an event on the server side

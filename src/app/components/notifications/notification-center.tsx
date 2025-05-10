@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, X } from "lucide-react";
+import { Bell, Check, X } from "lucide-react";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
+import Link from "next/link";
 import { api } from "@/lib/trpc/api";
-import { clientPusher, getUserChannel, PusherEvents } from "@/lib/pusher";
+import { clientPusher, getUserChannel, PusherEvents, triggerEvent } from "@/lib/pusher";
 import { formatDistanceToNow } from "date-fns";
 
 type Notification = {
@@ -27,18 +28,30 @@ export function NotificationCenter() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const { data: session } = useSession();
-  
+
   // trpc query to get notifications
   const { data, isLoading, refetch } = api.notification.getAll.useQuery(
-    { limit: 10 },
+    { limit: 20 },
     { enabled: !!session?.user?.id }
   );
-  
-  // trpc mutation to mark notifications as read
-  const { mutate: markAsRead } = api.notification.markAsRead.useMutation({
+
+  // trpc mutation to mark all notifications as read
+  const { mutate: markAllAsRead } = api.notification.markAsRead.useMutation({
     onSuccess: () => {
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       setUnreadCount(0);
-      refetch();
+    },
+  });
+
+  // trpc mutation to mark one notification as read
+  const { mutate: markOneAsRead } = api.notification.markAsRead.useMutation({
+    onSuccess: (_, variables) => {
+      if (variables.notificationId) {
+        setNotifications(prev => prev.map(n =>
+          n.id === variables.notificationId ? { ...n, isRead: true } : n
+        ));
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      }
     },
   });
 
@@ -50,26 +63,44 @@ export function NotificationCenter() {
     }
   }, [data]);
 
-  // Set up Pusher subscription
+  // Set up Pusher subscription for real-time notifications
   useEffect(() => {
     if (!session?.user?.id) return;
 
     const channel = clientPusher.subscribe(getUserChannel(session.user.id));
-    
+
+    // Handle new notification
     channel.bind(PusherEvents.NEW_NOTIFICATION, (newNotification: Notification) => {
-      // Update the notifications list
+      // Add to the local notifications list
       setNotifications((prev) => [newNotification, ...prev]);
-      
+
       // Increment unread count
       setUnreadCount((prev) => prev + 1);
-      
-      // Show a browser notification if allowed
+
+      // Show browser notification if permission is granted
       if (Notification.permission === "granted") {
-        const content = newNotification.content || "You have a new notification";
+        const content = newNotification.content || "გაქვთ ახალი შეტყობინება";
         new Notification("DapDip", {
           body: content,
-          icon: "/favicon.ico", // Default DapDip icon
+          icon: "/favicon.ico",
         });
+      }
+    });
+
+    // Handle read notification event
+    channel.bind(PusherEvents.READ_NOTIFICATION, (data: { notificationId?: string }) => {
+      if (data.notificationId) {
+        // Mark specific notification as read
+        setNotifications((prev) =>
+          prev.map((n) => n.id === data.notificationId ? { ...n, isRead: true } : n)
+        );
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+      } else {
+        // Mark all notifications as read
+        setNotifications((prev) =>
+          prev.map((n) => ({ ...n, isRead: true }))
+        );
+        setUnreadCount(0);
       }
     });
 
@@ -80,129 +111,211 @@ export function NotificationCenter() {
     };
   }, [session?.user?.id]);
 
-  // Request notification permission
+  // Request browser notification permission
   useEffect(() => {
     if (Notification.permission !== "granted" && Notification.permission !== "denied") {
       Notification.requestPermission();
     }
   }, []);
 
+  // Toggle notification panel and mark as read when opening
   const toggleNotifications = () => {
     setIsOpen(!isOpen);
-    
+
     // Mark all as read when opening
     if (!isOpen && unreadCount > 0) {
-      markAsRead();
+      markAllAsRead({});
+
+      // Also trigger real-time event to update other clients
+      if (session?.user?.id) {
+        triggerEvent(
+          getUserChannel(session.user.id),
+          PusherEvents.READ_NOTIFICATION,
+          {}
+        );
+      }
     }
   };
 
-  const formatNotificationContent = (notification: Notification) => {
+  // Get notification content based on type
+  const getNotificationText = (notification: Notification) => {
+    const senderName = notification.sender?.name || "ვიღაც";
+
     switch (notification.type) {
       case "FOLLOW":
-        return `${notification.sender?.name || "Someone"} started following you`;
+        return `${senderName} დაგიწყოთ გამოწერა.`;
       case "LIKE":
-        return `${notification.sender?.name || "Someone"} liked your post`;
+        return `${senderName}-ს მოეწონა თქვენი პოსტი.`;
       case "COMMENT":
-        return `${notification.sender?.name || "Someone"} commented on your post`;
+        return `${senderName}-მა დააკომენტარა თქვენს პოსტზე.`;
       case "MENTION":
-        return `${notification.sender?.name || "Someone"} mentioned you in a post`;
+        return `${senderName}-მა მოგიხსენიათ პოსტში.`;
       case "FRIEND_REQUEST":
-        return `${notification.sender?.name || "Someone"} sent you a friend request`;
+        return `${senderName}-მა გამოგიგზავნათ მეგობრობის მოთხოვნა.`;
       case "MESSAGE":
-        return `${notification.sender?.name || "Someone"} sent you a message`;
+        return `${senderName}-მა გამოგიგზავნათ შეტყობინება.`;
       case "SYSTEM":
-        return notification.content || "System notification";
+        return notification.content || "სისტემური შეტყობინება";
       default:
-        return notification.content || "New notification";
+        return notification.content || "ახალი შეტყობინება";
     }
   };
 
-  const getNotificationIcon = () => {
-    // This could be expanded with more specific icons for each notification type
-    return <Bell className="h-5 w-5" />;
+  // Render appropriate icon for each notification type
+  const renderNotificationIcon = (type: string) => {
+    switch (type) {
+      case "FOLLOW":
+        return (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 text-accent-blue">
+            <path d="M6.25 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM3.25 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 01-.364-.63l-.001-.122zM19.75 7.5a.75.75 0 00-1.5 0v2.25H16a.75.75 0 000 1.5h2.25v2.25a.75.75 0 001.5 0v-2.25H22a.75.75 0 000-1.5h-2.25V7.5z" />
+          </svg>
+        );
+      case "LIKE":
+        return (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 text-accent-red">
+            <path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" />
+          </svg>
+        );
+      case "COMMENT":
+        return (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 text-accent-green">
+            <path fillRule="evenodd" d="M5.337 21.718a6.707 6.707 0 01-.533-.074.75.75 0 01-.44-1.223 3.73 3.73 0 00.814-1.686c.023-.115-.022-.317-.254-.543C3.274 16.587 2.25 14.41 2.25 12c0-5.03 4.428-9 9.75-9s9.75 3.97 9.75 9c0 5.03-4.428 9-9.75 9-.833 0-1.643-.097-2.417-.279a6.721 6.721 0 01-4.246.997z" clipRule="evenodd" />
+          </svg>
+        );
+      case "MESSAGE":
+        return (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 text-accent-blue">
+            <path d="M4.913 2.658c2.075-.27 4.19-.408 6.337-.408 2.147 0 4.262.139 6.337.408 1.922.25 3.291 1.861 3.405 3.727a4.403 4.403 0 00-1.032-.211 50.89 50.89 0 00-8.42 0c-2.358.196-4.04 2.19-4.04 4.434v4.286a4.47 4.47 0 002.433 3.984L7.28 21.53A.75.75 0 016 21v-4.03a48.527 48.527 0 01-1.087-.128C2.905 16.58 1.5 14.833 1.5 12.862V6.638c0-1.97 1.405-3.718 3.413-3.979z" />
+            <path d="M15.75 7.5c-1.376 0-2.739.057-4.086.169C10.124 7.797 9 9.103 9 10.609v4.285c0 1.507 1.128 2.814 2.67 2.94 1.243.102 2.5.157 3.768.165l2.782 2.781a.75.75 0 001.28-.53v-2.39l.33-.026c1.542-.125 2.67-1.433 2.67-2.94v-4.286c0-1.505-1.125-2.811-2.664-2.94A49.392 49.392 0 0015.75 7.5z" />
+          </svg>
+        );
+      default:
+        return <Bell className="h-5 w-5 text-text-secondary" />;
+    }
   };
 
   return (
     <div className="relative">
+      {/* Notification Button */}
       <button
         onClick={toggleNotifications}
-        className="relative p-2 text-foreground hover:bg-muted rounded-full transition-colors"
-        aria-label="Notifications"
+        className="relative flex h-10 w-10 items-center justify-center rounded-full bg-card-secondary-bg hover:bg-hover-bg transition-transform active:scale-95"
+        aria-label="შეტყობინებები"
       >
-        <Bell className="h-5 w-5" />
+        <Bell className="h-6 w-6" />
         {unreadCount > 0 && (
-          <span className="absolute top-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-            {unreadCount > 9 ? "9+" : unreadCount}
-          </span>
+          <>
+            <span className="absolute -right-1 -top-1 flex min-w-[18px] h-[18px] items-center justify-center rounded-full bg-accent-red px-[2px] text-xs font-bold text-white animate-[pulse_1.5s_ease-in-out_infinite] shadow-sm">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+            <span className="absolute inset-0 rounded-full bg-accent-red/20 animate-ping opacity-75"></span>
+          </>
         )}
       </button>
 
+      {/* Notification Panel */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto rounded-md bg-popover shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
-          <div className="p-3 border-b border-border flex justify-between items-center">
-            <h3 className="font-semibold">Notifications</h3>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="p-1 rounded-full hover:bg-muted transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
+        <div className="absolute right-0 top-12 w-80 max-h-[500px] rounded-lg border border-border-color bg-card-bg shadow-lg overflow-hidden z-50">
+          <div className="flex items-center justify-between border-b border-border-color p-3">
+            <h3 className="font-semibold text-text-primary">შეტყობინებები</h3>
+            <div className="flex space-x-2">
+              {unreadCount > 0 && (
+                <button
+                  onClick={() => markAllAsRead({})}
+                  className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-text-primary hover:bg-hover-bg"
+                >
+                  <Check className="h-3 w-3" />
+                  <span>ყველას წაკითხვა</span>
+                </button>
+              )}
+              <button
+                onClick={() => setIsOpen(false)}
+                className="rounded-full p-1 text-text-secondary hover:bg-hover-bg"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
-          {isLoading ? (
-            <div className="p-4 text-center text-muted-foreground">Loading...</div>
-          ) : notifications.length === 0 ? (
-            <div className="p-4 text-center text-muted-foreground">No notifications yet</div>
-          ) : (
-            <div className="py-1">
-              {notifications.map((notification) => (
-                <a
-                  key={notification.id}
-                  href={notification.url || "#"}
-                  className={`block px-4 py-3 hover:bg-muted transition-colors ${
-                    !notification.isRead ? "bg-primary/5" : ""
-                  }`}
-                >
-                  <div className="flex items-start">
-                    <div className="flex-shrink-0 mr-3">
+          <div className="overflow-y-auto max-h-[400px]">
+            {isLoading ? (
+              <div className="flex items-center justify-center p-8 text-text-secondary">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-solid border-current border-t-transparent"></div>
+              </div>
+            ) : notifications.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 text-text-secondary">
+                <Bell className="h-12 w-12 mb-2 opacity-50" />
+                <p>არ გაქვთ შეტყობინებები</p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-border-color">
+                {notifications.map((notification) => (
+                  <li
+                    key={notification.id}
+                    className={`hover:bg-hover-bg transition-colors ${
+                      !notification.isRead ? 'bg-hover-bg/50' : ''
+                    }`}
+                  >
+                    <Link
+                      href={notification.url || '#'}
+                      className="flex items-start gap-3 p-3"
+                      onClick={() => {
+                        if (!notification.isRead) {
+                          markOneAsRead({ notificationId: notification.id });
+
+                          // Trigger real-time event
+                          if (session?.user?.id) {
+                            triggerEvent(
+                              getUserChannel(session.user.id),
+                              PusherEvents.READ_NOTIFICATION,
+                              { notificationId: notification.id }
+                            );
+                          }
+                        }
+                      }}
+                    >
                       {notification.sender?.image ? (
                         <Image
                           src={notification.sender.image}
                           alt={notification.sender.name || "User"}
-                          width={32}
-                          height={32}
-                          className="h-8 w-8 rounded-full object-cover"
+                          width={40}
+                          height={40}
+                          className="h-10 w-10 rounded-full object-cover"
                         />
                       ) : (
-                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-                          {getNotificationIcon()}
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-card-secondary-bg">
+                          {renderNotificationIcon(notification.type)}
                         </div>
                       )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">
-                        {formatNotificationContent(notification)}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {formatDistanceToNow(new Date(notification.createdAt), {
-                          addSuffix: true,
-                        })}
-                      </p>
-                    </div>
-                  </div>
-                </a>
-              ))}
-            </div>
-          )}
+
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-text-primary">
+                          {getNotificationText(notification)}
+                        </p>
+                        <p className="text-xs text-text-secondary mt-1">
+                          {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+                        </p>
+                      </div>
+
+                      {!notification.isRead && (
+                        <div className="h-2 w-2 rounded-full bg-accent-blue mt-1 flex-shrink-0"></div>
+                      )}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           {notifications.length > 0 && (
-            <div className="p-2 border-t border-border">
-              <button
+            <div className="border-t border-border-color p-2">
+              <Link
+                href="/notifications"
+                className="block rounded-md px-3 py-2 text-center text-sm text-accent-blue hover:bg-hover-bg"
                 onClick={() => setIsOpen(false)}
-                className="w-full py-2 px-4 text-sm text-center text-primary hover:underline"
               >
-                View all notifications
-              </button>
+                ყველას ნახვა
+              </Link>
             </div>
           )}
         </div>
