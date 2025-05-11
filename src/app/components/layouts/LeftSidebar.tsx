@@ -210,6 +210,23 @@ export default function LeftSidebar() {
             </li>
             <li>
               <Link
+                href="/ai-settings/tokens"
+                className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-hover-bg"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 text-white">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-5">
+                    <path d="M12 .75a8.25 8.25 0 00-4.135 15.39c.686.398 1.115 1.008 1.134 1.623a.75.75 0 00.577.706c.352.083.71.148 1.074.195.323.041.6-.218.6-.544v-4.661a6.75 6.75 0 111.5 0v4.661c0 .326.277.585.6.544.364-.047.722-.112 1.074-.195a.75.75 0 00.577-.706c.02-.615.448-1.225 1.134-1.623A8.25 8.25 0 0012 .75z" />
+                    <path fillRule="evenodd" d="M9.75 15.75a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0v-2.25a.75.75 0 01.75-.75zm4.5 0a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0v-2.25a.75.75 0 01.75-.75z" clipRule="evenodd" />
+                  </svg>
+                </span>
+                <span className="flex items-center gap-1">
+                  AI Packages
+                  <span className="ml-1 bg-primary text-primary-foreground text-[10px] px-1 py-0.5 rounded">NEW</span>
+                </span>
+              </Link>
+            </li>
+            <li>
+              <Link
                 href="/admin/seo"
                 className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-hover-bg"
               >
@@ -260,6 +277,34 @@ export default function LeftSidebar() {
                   </svg>
                 </span>
                 <span>Inline Styles</span>
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/api/test/token-system"
+                className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-hover-bg"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-card-secondary-bg">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-5">
+                    <path d="M12 .75a8.25 8.25 0 00-4.135 15.39c.686.398 1.115 1.008 1.134 1.623a.75.75 0 00.577.706c.352.083.71.148 1.074.195.323.041.6-.218.6-.544v-4.661a6.75 6.75 0 111.5 0v4.661c0 .326.277.585.6.544.364-.047.722-.112 1.074-.195a.75.75 0 00.577-.706c.02-.615.448-1.225 1.134-1.623A8.25 8.25 0 0012 .75z" />
+                    <path fillRule="evenodd" d="M9.75 15.75a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0v-2.25a.75.75 0 01.75-.75zm4.5 0a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0v-2.25a.75.75 0 01.75-.75z" clipRule="evenodd" />
+                  </svg>
+                </span>
+                <span>Token API Test</span>
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/test-tokens"
+                className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-hover-bg"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-5 text-primary">
+                    <path d="M4.5 3.75a3 3 0 00-3 3v.75h21v-.75a3 3 0 00-3-3h-15z" />
+                    <path fillRule="evenodd" d="M22.5 9.75h-21v7.5a3 3 0 003 3h15a3 3 0 003-3v-7.5zm-18 3.75a.75.75 0 01.75-.75h6a.75.75 0 010 1.5h-6a.75.75 0 01-.75-.75zm.75 2.25a.75.75 0 000 1.5h3a.75.75 0 000-1.5h-3z" clipRule="evenodd" />
+                  </svg>
+                </span>
+                <span>Token UI Test</span>
               </Link>
             </li>
           </ul>

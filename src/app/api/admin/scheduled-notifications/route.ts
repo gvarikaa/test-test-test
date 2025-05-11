@@ -149,8 +149,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error('Error creating scheduled notification:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
@@ -196,8 +197,9 @@ export async function PUT(req: NextRequest) {
     });
   } catch (error) {
     console.error('Error cancelling scheduled notification:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
@@ -249,8 +251,9 @@ export async function DELETE(req: NextRequest) {
     });
   } catch (error) {
     console.error('Error deleting scheduled notification:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

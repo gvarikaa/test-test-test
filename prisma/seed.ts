@@ -3,6 +3,7 @@ import { hash } from 'bcrypt';
 import { seedReelData } from './seeds/reels.js';
 import { seedEvents } from './seeds/events';
 import { seedEventCategories } from './seeds/event-categories';
+import { seedSubscriptionPlans } from './seeds/subscription-plans';
 
 const prisma = new PrismaClient();
 
@@ -406,6 +407,9 @@ async function main() {
 
   // Seed events
   await seedEvents(prisma);
+
+  // Seed subscription plans
+  await seedSubscriptionPlans();
 
   console.log('Seed completed successfully!');
 }

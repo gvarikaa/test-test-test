@@ -933,49 +933,193 @@ model ProgressRecord {
   @@index([profileId])
 }
 
+enum SubscriptionTier {
+  FREE
+  BASIC
+  PRO
+  ENTERPRISE
+  CUSTOM
+}
+
+enum SubscriptionPeriod {
+  MONTHLY
+  QUARTERLY
+  BIANNUAL
+  ANNUAL
+}
+
+enum PreferredModel {
+  GEMINI_1_5_PRO
+  GEMINI_2_5_PRO
+  AUTO
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  PAYPAL
+  BANK_TRANSFER
+  CRYPTO
+  MANUAL
+  NONE
+}
+
 model AITokenLimit {
-  id                   String             @id @default(cuid())
-  userId               String             @unique
-  tier                 String             @default("FREE")
-  limit                Int                @default(150)
-  usage                Int                @default(0)
-  resetAt              DateTime
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
-  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenUsageStats      AITokenUsageStat[]
-  monthlyAllocation    Int                @default(5000) // Monthly token allocation
-  previousMonthCarry   Int                @default(0) // Tokens carried over from previous month
-  bonusTokens          Int                @default(0) // Bonus tokens from promotions
-  lifetimeUsage        Int                @default(0) // Total lifetime token usage
-  lifetimeAllocated    Int                @default(0) // Total lifetime token allocation
-  lastActivity         DateTime? // Last AI activity timestamp
-  tokenRefreshSchedule String? // Cron expression for token refresh (tier-dependent)
+  id                    String                @id @default(cuid())
+  userId                String                @unique
+  tier                  SubscriptionTier      @default(FREE)
+  limit                 Int                   @default(150)           // Daily token limit
+  usage                 Int                   @default(0)             // Current usage toward daily limit
+  resetAt               DateTime                                      // When daily limit resets
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenUsageStats       AITokenUsageStat[]
+  monthlyAllocation     Int                   @default(5000)          // Monthly token allocation
+  previousMonthCarry    Int                   @default(0)             // Tokens carried over from previous month
+  bonusTokens           Int                   @default(0)             // Bonus tokens from promotions
+  lifetimeUsage         Int                   @default(0)             // Total lifetime token usage
+  lifetimeAllocated     Int                   @default(0)             // Total lifetime token allocation
+  lastActivity          DateTime?                                     // Last AI activity timestamp
+  tokenRefreshSchedule  String?                                       // Cron expression for token refresh (tier-dependent)
+
+  // New fields for enhanced subscription system
+  subscriptionStartedAt DateTime              @default(now())         // When subscription started
+  subscriptionEndsAt    DateTime?                                     // When subscription ends
+  subscriptionPeriod    SubscriptionPeriod    @default(MONTHLY)       // Subscription period length
+  subscriptionId        String?                                       // External subscription ID
+  subscriptionActive    Boolean               @default(true)          // Whether subscription is active
+  preferredModel        PreferredModel        @default(AUTO)          // User's preferred AI model
+  modelAllocation       Json?                                         // Allocation percentages between models
+  customTokens          Int?                                          // For CUSTOM tier only - token amount
+  carryOverLimit        Int                   @default(0)             // Max tokens that can be carried over
+  carryOverPercent      Int                   @default(0)             // % of unused tokens carried (0-100)
+  autoRenew             Boolean               @default(false)         // Whether to auto-renew subscription
+  paymentMethod         PaymentMethod         @default(NONE)          // Payment method used
+  lastBillingDate       DateTime?                                     // Date of last billing
+  nextBillingDate       DateTime?                                     // Date of next billing
+  discountPercent       Int                   @default(0)             // Any discount applied (0-100)
+  discountReason        String?                                       // Reason for discount
+
+  // Relations
+  purchases             TokenPurchaseHistory[]                        // Purchase history
+}
+
+model TokenPurchaseHistory {
+  id                 String            @id @default(cuid())
+  tokenLimitId       String
+  amount             Int               // Number of tokens purchased
+  cost               Float             // Cost of purchase in currency
+  currency           String            @default("USD")
+  purchaseDate       DateTime          @default(now())
+  expiryDate         DateTime?         // When tokens expire if applicable
+  tier               SubscriptionTier
+  period             SubscriptionPeriod
+  paymentMethod      PaymentMethod
+  transactionId      String?           // External payment processor transaction ID
+  isRecurring        Boolean           @default(false)
+  isCancelled        Boolean           @default(false)
+  cancellationDate   DateTime?
+  notes              String?
+  metadata           Json?
+  model              PreferredModel    @default(AUTO)
+  invoiceUrl         String?           // URL to invoice document
+  receiptUrl         String?           // URL to receipt document
+  discountPercent    Int               @default(0)
+  discountCode       String?
+  tokenLimit         AITokenLimit      @relation(fields: [tokenLimitId], references: [id], onDelete: Cascade)
+
+  @@index([tokenLimitId])
+  @@index([purchaseDate])
+  @@index([tier])
+  @@index([model])
 }
 
 model AITokenUsageStat {
-  id               String       @id @default(cuid())
-  tokenLimitId     String
-  operationType    String // Type of operation (chat, content analysis, recommendation, etc.)
-  tokensUsed       Int // Number of tokens used in this operation
-  model            String // Model used for the operation
-  timestamp        DateTime     @default(now())
-  endpoint         String? // API endpoint or function called
-  featureArea      String? // Area of the application (health, chat, content, etc.)
-  prompt           String? // The prompt used (sanitized/truncated for privacy)
-  promptTokens     Int? // Number of tokens in the prompt
-  completionTokens Int? // Number of tokens in the completion
-  success          Boolean      @default(true) // Whether the operation was successful
-  errorCode        String? // Error code if the operation failed
-  metadata         Json? // Additional metadata for analysis
-  responseTime     Int? // Response time in milliseconds
-  tokenLimit       AITokenLimit @relation(fields: [tokenLimitId], references: [id], onDelete: Cascade)
+  id                String        @id @default(cuid())
+  tokenLimitId      String
+  operationType     String        // Type of operation (chat, content analysis, recommendation, etc.)
+  tokensUsed        Int           // Number of tokens used in this operation
+  model             PreferredModel // Model used for the operation
+  timestamp         DateTime      @default(now())
+  endpoint          String?       // API endpoint or function called
+  featureArea       String?       // Area of the application (health, chat, content, etc.)
+  prompt            String?       // The prompt used (sanitized/truncated for privacy)
+  promptTokens      Int?          // Number of tokens in the prompt
+  completionTokens  Int?          // Number of tokens in the completion
+  success           Boolean       @default(true) // Whether the operation was successful
+  errorCode         String?       // Error code if the operation failed
+  metadata          Json?         // Additional metadata for analysis
+  responseTime      Int?          // Response time in milliseconds
+  costMultiplier    Float         @default(1.0)  // Model-specific cost multiplier
+  contentType       String?       // Type of content (post, chat, health, etc.)
+  contentId         String?       // ID of the content being analyzed
+  userAction        String?       // Specific user action that triggered this usage
+  tokenCost         Float?        // Calculated cost in tokens after model multiplier
+  featureCategory   String?       // High-level category (creation, analysis, recommendation)
+  associatedUrl     String?       // URL associated with this operation
+  tokenLimit        AITokenLimit  @relation(fields: [tokenLimitId], references: [id], onDelete: Cascade)
 
   @@index([tokenLimitId])
   @@index([timestamp])
   @@index([operationType])
   @@index([model])
   @@index([featureArea])
+  @@index([featureCategory])
+  @@index([contentType, contentId])
+}
+
+model AISubscriptionPlan {
+  id                  String            @id @default(cuid())
+  name                String
+  tier                SubscriptionTier
+  period              SubscriptionPeriod
+  tokenAmount         Int               // Base token amount for this plan
+  costPerPeriod       Float             // Cost per period
+  currency            String            @default("USD")
+  description         String?
+  features            Json              // Array of included features
+  isActive            Boolean           @default(true)
+  carryOverPercent    Int               @default(0)     // % of unused tokens carried over
+  maxCarryOver        Int               @default(0)     // Max tokens that can be carried over
+  discountPercentage  Json?             // Discounts for longer periods {QUARTERLY: 10, BIANNUAL: 15, ANNUAL: 20}
+  modelPricing        Json?             // Model-specific pricing {GEMINI_1_5_PRO: 1.0, GEMINI_2_5_PRO: 1.4}
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  displayOrder        Int               @default(0)     // Order in which plans are displayed
+  popularPlan         Boolean           @default(false) // Whether this is marked as a popular plan
+  maxTokensPerDay     Int?              // Max tokens per day (rate limiting)
+  maxTokensPerHour    Int?              // Max tokens per hour (rate limiting)
+
+  @@unique([tier, period])
+  @@index([tier])
+  @@index([period])
+  @@index([isActive])
+  @@index([displayOrder])
+}
+
+model AITokenUsageAggregation {
+  id                 String       @id @default(cuid())
+  userId             String
+  date               DateTime     // Day/month being aggregated
+  aggregationType    String       // "daily", "monthly", "feature", "model", etc.
+  feature            String?      // Feature area if aggregating by feature
+  model              String?      // Model if aggregating by model
+  tokenCount         Int          // Total tokens used
+  operationCount     Int          // Number of operations
+  averageResponseTime Int?        // Average response time
+  successRate        Float?       // Success rate (0-1)
+  peakUsageTime      DateTime?    // Time of peak usage
+  costInTokens       Float?       // Cost in tokens (after model multiplier)
+  metadata           Json?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@unique([userId, date, aggregationType, feature, model])
+  @@index([userId])
+  @@index([date])
+  @@index([aggregationType])
+  @@index([feature])
+  @@index([model])
 }
 
 model AIContentAnalysis {

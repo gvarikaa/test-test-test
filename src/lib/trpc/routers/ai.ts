@@ -772,18 +772,24 @@ export const aiRouter = router({
   upgradeTokenTier: protectedProcedure
     .input(
       z.object({
-        tier: z.enum(['BASIC', 'PRO', 'ENTERPRISE']),
+        tier: z.enum(['BASIC', 'PRO', 'ENTERPRISE', 'CUSTOM']),
+        period: z.enum(['MONTHLY', 'QUARTERLY', 'BIANNUAL', 'ANNUAL']).optional(),
+        model: z.enum(['GEMINI_1_5_PRO', 'GEMINI_2_5_PRO', 'AUTO']).optional(),
+        customTokens: z.number().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const { tier } = input;
+      const { tier, period = 'MONTHLY', model = 'AUTO', customTokens } = input;
 
       // Upgrade user tier using token management service
       await upgradeUserTier(userId, {
         tier: tier as TokenTier,
         resetType: 'none',
         bonusTokens: 50, // Bonus tokens for upgrading
+        subscriptionPeriod: period,
+        preferredModel: model,
+        customTokens: tier === 'CUSTOM' ? customTokens : undefined,
       });
 
       // Get the updated token limit
@@ -804,8 +810,242 @@ export const aiRouter = router({
         usage: tokenLimit.usage,
         resetAt: tokenLimit.resetAt,
         monthlyAllocation: tokenLimit.monthlyAllocation,
+        previousMonthCarry: tokenLimit.previousMonthCarry,
         bonusTokens: tokenLimit.bonusTokens,
+        subscriptionPeriod: tokenLimit.subscriptionPeriod,
+        preferredModel: tokenLimit.preferredModel,
+        subscriptionEndsAt: tokenLimit.subscriptionEndsAt,
       };
+    }),
+
+  // Get subscription plans
+  getSubscriptionPlans: protectedProcedure
+    .query(async ({ ctx }) => {
+      try {
+        // Get subscription plans from the database
+        const plans = await ctx.db.aISubscriptionPlan.findMany({
+          where: {
+            isActive: true,
+          },
+          orderBy: {
+            displayOrder: 'asc',
+          },
+        });
+
+        return plans;
+      } catch (error) {
+        console.error('Error getting subscription plans:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to retrieve subscription plans',
+        });
+      }
+    }),
+
+  // Purchase token package
+  purchaseTokenPackage: protectedProcedure
+    .input(
+      z.object({
+        tier: z.enum(['BASIC', 'PRO', 'ENTERPRISE', 'CUSTOM']),
+        period: z.enum(['MONTHLY', 'QUARTERLY', 'BIANNUAL', 'ANNUAL']),
+        model: z.enum(['GEMINI_1_5_PRO', 'GEMINI_2_5_PRO', 'AUTO']),
+        paymentMethod: z.enum(['CREDIT_CARD', 'PAYPAL', 'BANK_TRANSFER', 'CRYPTO', 'MANUAL']),
+        customTokens: z.number().optional(),
+        transactionId: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const userId = ctx.session.user.id;
+        const {
+          tier,
+          period,
+          model,
+          paymentMethod,
+          customTokens,
+          transactionId
+        } = input;
+
+        // Get pricing info
+        const tierPrices = {
+          'BASIC': 9.99,
+          'PRO': 24.99,
+          'ENTERPRISE': 49.99,
+          'CUSTOM': customTokens ? customTokens * 0.00025 : 39.99,
+        };
+
+        const periodMultipliers = {
+          'MONTHLY': 1,
+          'QUARTERLY': 3,
+          'BIANNUAL': 6,
+          'ANNUAL': 12,
+        };
+
+        const periodDiscounts = {
+          'MONTHLY': 0,
+          'QUARTERLY': 10,
+          'BIANNUAL': 15,
+          'ANNUAL': 20,
+        };
+
+        // Calculate cost with period discount
+        const basePrice = tierPrices[tier];
+        const discount = periodDiscounts[period];
+        const discountedPrice = basePrice * (1 - discount / 100);
+        const totalCost = discountedPrice * periodMultipliers[period];
+
+        // Calculate token amounts
+        const monthlyTokens = tier === 'BASIC' ? 30000 :
+                            tier === 'PRO' ? 100000 :
+                            tier === 'ENTERPRISE' ? 250000 :
+                            customTokens || 50000;
+
+        const totalTokens = monthlyTokens * periodMultipliers[period];
+
+        // Calculate subscription end date
+        const now = new Date();
+        const endDate = new Date(now);
+        endDate.setMonth(endDate.getMonth() + periodMultipliers[period]);
+
+        // Daily token limits
+        const dailyLimits = {
+          'BASIC': 1000,
+          'PRO': 5000,
+          'ENTERPRISE': 10000,
+          'CUSTOM': Math.max(1000, Math.floor(customTokens ? customTokens / 30 : 2000)),
+        };
+
+        // Get token limit record or create it
+        let tokenLimit = await ctx.db.aiTokenLimit.findUnique({
+          where: { userId },
+        });
+
+        if (!tokenLimit) {
+          tokenLimit = await ctx.db.aiTokenLimit.create({
+            data: {
+              userId,
+              tier: 'FREE',
+              limit: 150,
+              usage: 0,
+              resetAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+              monthlyAllocation: 5000,
+            },
+          });
+        }
+
+        // Create token purchase history
+        await ctx.db.tokenPurchaseHistory.create({
+          data: {
+            tokenLimitId: tokenLimit.id,
+            amount: totalTokens,
+            cost: totalCost,
+            currency: 'USD',
+            expiryDate: endDate,
+            tier: tier,
+            period: period,
+            paymentMethod: paymentMethod,
+            transactionId: transactionId || `TR-${Date.now()}`,
+            isRecurring: true,
+            model: model,
+            discountPercent: discount,
+          },
+        });
+
+        // Calculate carryover percentages
+        const carryOverPercentages = {
+          'BASIC': 10,
+          'PRO': 25,
+          'ENTERPRISE': 50,
+          'CUSTOM': 40,
+        };
+
+        // Update token limit
+        await ctx.db.aiTokenLimit.update({
+          where: { id: tokenLimit.id },
+          data: {
+            tier: tier,
+            limit: dailyLimits[tier],
+            monthlyAllocation: monthlyTokens,
+            subscriptionPeriod: period,
+            subscriptionStartedAt: now,
+            subscriptionEndsAt: endDate,
+            preferredModel: model,
+            carryOverPercent: carryOverPercentages[tier],
+            carryOverLimit: Math.floor(monthlyTokens * carryOverPercentages[tier] / 100),
+            autoRenew: true,
+            paymentMethod: paymentMethod,
+            lastBillingDate: now,
+            nextBillingDate: endDate,
+            discountPercent: discount,
+            subscriptionActive: true,
+            customTokens: tier === 'CUSTOM' ? customTokens : null,
+          },
+        });
+
+        // Get updated token limit
+        const updatedTokenLimit = await ctx.db.aiTokenLimit.findUnique({
+          where: { userId },
+        });
+
+        if (!updatedTokenLimit) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Failed to retrieve updated token limit after purchase',
+          });
+        }
+
+        return {
+          success: true,
+          transactionId: transactionId || `TR-${Date.now()}`,
+          purchaseDate: now,
+          expiryDate: endDate,
+          tier: updatedTokenLimit.tier,
+          monthlyAllocation: updatedTokenLimit.monthlyAllocation,
+          cost: totalCost,
+          currency: 'USD',
+        };
+      } catch (error) {
+        console.error('Error purchasing token package:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error instanceof Error ? error.message : 'Failed to purchase token package',
+        });
+      }
+    }),
+
+  // Get user token purchase history
+  getTokenPurchaseHistory: protectedProcedure
+    .query(async ({ ctx }) => {
+      try {
+        const userId = ctx.session.user.id;
+
+        // Get token limit ID
+        const tokenLimit = await ctx.db.aiTokenLimit.findUnique({
+          where: { userId },
+        });
+
+        if (!tokenLimit) {
+          return [];
+        }
+
+        // Get purchase history
+        const purchases = await ctx.db.tokenPurchaseHistory.findMany({
+          where: {
+            tokenLimitId: tokenLimit.id,
+          },
+          orderBy: {
+            purchaseDate: 'desc',
+          },
+        });
+
+        return purchases;
+      } catch (error) {
+        console.error('Error getting token purchase history:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to retrieve token purchase history',
+        });
+      }
     }),
 
   // Detect language of text

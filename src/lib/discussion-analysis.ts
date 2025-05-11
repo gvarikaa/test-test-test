@@ -1,6 +1,6 @@
 import { db } from './db';
-import { geminiAPI, GeminiModel } from './gemini';
-import { trackTokenUsage } from './token-management';
+import { GeminiModel, getModelInstance } from './gemini';
+import { recordTokenUsage } from './token-management';
 
 export enum DiscussionTone {
   POSITIVE = 'positive',

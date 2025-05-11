@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import TokenHeaderDisplay from '../common/token-header-display';
 
 export default function FacebookHeader() {
   const [searchActive, setSearchActive] = useState(false);
@@ -163,6 +164,9 @@ export default function FacebookHeader() {
 
       {/* Right section: Actions */}
       <div className="flex items-center gap-2">
+        {/* Token Display */}
+        <TokenHeaderDisplay />
+
         {/* Menu */}
         <button className="relative flex h-10 w-10 items-center justify-center rounded-full bg-card-secondary-bg hover:bg-hover-bg">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6">

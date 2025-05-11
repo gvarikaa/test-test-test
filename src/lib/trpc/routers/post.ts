@@ -10,10 +10,10 @@ export const postRouter = router({
         limit: z.number().min(1).max(100).default(10),
         cursor: z.string().nullish(),
         personalized: z.boolean().default(false),
-      })
+      }).optional()
     )
     .query(async ({ ctx, input }) => {
-      const { limit, cursor, personalized } = input;
+      const { limit = 10, cursor, personalized = false } = input || {};
       const userId = ctx.session?.user?.id;
 
       // If user is logged in and wants personalized content, use personalization system
@@ -565,10 +565,10 @@ export const postRouter = router({
         limit: z.number().min(1).max(50).default(20),
         cursor: z.string().nullish(),
         includeReasons: z.boolean().default(true),
-      })
+      }).optional()
     )
     .query(async ({ ctx, input }) => {
-      const { limit, cursor, includeReasons } = input;
+      const { limit = 20, cursor, includeReasons = true } = input || {};
       const userId = ctx.session.user.id;
 
       try {
