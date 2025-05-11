@@ -26,10 +26,12 @@ model User {
   language                        String                           @default("en")
   theme                           String                           @default("system")
   aiChatInteractions              AIChatInteraction[]
+  aiChatMemories                  AIChatMemory[]
   aiContentAnalyses               AIContentAnalysis[]
   aiHealthRecommendations         AIHealthRecommendation[]
   aiTokenLimit                    AITokenLimit?
   accounts                        Account[]
+  behaviorLogs                    UserBehaviorLog[] // User behavior tracking for personalization
   chatParticipations              ChatParticipant[]
   comments                        Comment[]
   createdEvents                   Event[]
@@ -60,7 +62,10 @@ model User {
   groupReports                    GroupReport[]                    @relation("ReportCreator")
   groupReportedContent            GroupReport[]                    @relation("ReportedUser")
   healthProfile                   HealthProfile?
+  interests                       UserInterest[]
+  preferences                     UserPreference[]
   receivedMessages                Message[]                        @relation("MessageReceiver")
+  recommendations                 UserRecommendation[] // Personalized recommendations
   sentMessages                    Message[]                        @relation("MessageSender")
   notifications                   Notification[]                   @relation("NotificationRecipient")
   notificationsSent               Notification[]                   @relation("NotificationSender")
@@ -82,7 +87,6 @@ model User {
   sessions                        Session[]
   stories                         Story[]
   viewedStories                   StoryView[]
-  interests                       UserInterest[]
 }
 
 model Account {
@@ -121,7 +125,7 @@ model VerificationToken {
 
 model Post {
   id         String        @id @default(cuid())
-  content    String
+  content    String        @db.Text
   published  Boolean       @default(true)
   visibility Visibility    @default(PUBLIC)
   createdAt  DateTime      @default(now())
@@ -173,23 +177,40 @@ model Media {
 }
 
 model Comment {
-  id        String     @id @default(cuid())
-  content   String
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  userId    String
-  postId    String
-  parentId  String?
-  parent    Comment?   @relation("CommentReplies", fields: [parentId], references: [id])
-  replies   Comment[]  @relation("CommentReplies")
-  post      Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  media     Media[]
-  reactions Reaction[]
+  id              String           @id @default(cuid())
+  content         String           @db.Text
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  userId          String
+  postId          String
+  parentId        String?
+  parent          Comment?         @relation("CommentReplies", fields: [parentId], references: [id])
+  replies         Comment[]        @relation("CommentReplies")
+  post            Post             @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media           Media[]
+  reactions       Reaction[]
+  commentAnalysis CommentAnalysis?
 
   @@index([userId])
   @@index([postId])
   @@index([parentId])
+}
+
+model CommentAnalysis {
+  id        String   @id @default(cuid())
+  commentId String   @unique
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+}
+
+model DiscussionAnalysis {
+  id        String   @id @default(cuid())
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Reaction {
@@ -278,7 +299,7 @@ model ChatParticipant {
 
 model Message {
   id         String            @id @default(cuid())
-  content    String?
+  content    String?           @db.Text
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
   isDeleted  Boolean           @default(false)
@@ -300,7 +321,7 @@ model Message {
 model Notification {
   id                      String                      @id @default(cuid())
   type                    NotificationType
-  content                 String?
+  content                 String?                     @db.Text
   isRead                  Boolean                     @default(false)
   createdAt               DateTime                    @default(now())
   recipientId             String
@@ -347,7 +368,7 @@ model Notification {
 model Topic {
   id            String         @id @default(cuid())
   name          String         @unique
-  description   String?
+  description   String?        @db.Text
   createdAt     DateTime       @default(now())
   postHashtags  PostHashtag[]
   reelHashtags  ReelHashtag[]
@@ -359,12 +380,61 @@ model UserInterest {
   createdAt DateTime @default(now())
   userId    String
   topicId   String
+  weight    Float    @default(1.0) // Interest weight (0-1)
   topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, topicId])
   @@index([userId])
   @@index([topicId])
+}
+
+model UserBehaviorLog {
+  id           String   @id @default(cuid())
+  userId       String
+  behaviorType String
+  contentId    String
+  contentType  String
+  timestamp    DateTime @default(now())
+  duration     Int?
+  metadata     Json?
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([contentId])
+  @@index([contentType])
+  @@index([behaviorType])
+  @@index([timestamp])
+}
+
+model KeyValueStore {
+  key       String   @id
+  value     String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UserRecommendation {
+  id          String    @id @default(cuid())
+  userId      String
+  contentId   String
+  contentType String
+  score       Float
+  reason      String
+  source      String
+  isViewed    Boolean   @default(false)
+  isClicked   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  viewedAt    DateTime?
+  clickedAt   DateTime?
+  metadata    Json?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([contentId])
+  @@index([contentType])
+  @@index([source])
+  @@index([createdAt])
 }
 
 model PostHashtag {
@@ -383,9 +453,9 @@ model PostHashtag {
 model AIAnalysis {
   id               String   @id @default(cuid())
   sentiment        String?
-  topics           String?
-  suggestions      String?
-  detectedEntities String?
+  topics           String?  @db.Text
+  suggestions      String?  @db.Text
+  detectedEntities String?  @db.Text
   modelVersion     String?
   createdAt        DateTime @default(now())
   postId           String   @unique
@@ -419,10 +489,10 @@ model StoryView {
 
 model Reel {
   id               String         @id @default(cuid())
-  caption          String?
+  caption          String?        @db.Text
   createdAt        DateTime       @default(now())
   userId           String
-  aiAnalysis       String?
+  aiAnalysis       String?        @db.Text
   aspectRatio      String?
   commentCount     Int            @default(0)
   duration         Float?
@@ -468,7 +538,7 @@ model ReelLike {
 
 model ReelComment {
   id        String        @id @default(cuid())
-  content   String
+  content   String        @db.Text
   createdAt DateTime      @default(now())
   reelId    String
   userId    String
@@ -577,7 +647,7 @@ model ReelEffect {
   id          String     @id @default(cuid())
   name        String
   type        EffectType
-  description String?
+  description String?    @db.Text
   iconUrl     String?
   settings    Json?
   createdAt   DateTime   @default(now())
@@ -590,7 +660,7 @@ model ReelEffect {
 model ReelPlaylist {
   id          String      @id @default(cuid())
   name        String
-  description String?
+  description String?     @db.Text
   isPrivate   Boolean     @default(false)
   coverImage  String?
   createdAt   DateTime    @default(now())
@@ -605,7 +675,7 @@ model Page {
   id            String         @id @default(cuid())
   name          String
   handle        String         @unique
-  description   String?
+  description   String?        @db.Text
   logoImage     String?
   coverImage    String?
   createdAt     DateTime       @default(now())
@@ -636,7 +706,7 @@ model PageRole {
 model Event {
   id                String               @id @default(cuid())
   title             String
-  description       String?
+  description       String?              @db.Text
   location          String?
   startsAt          DateTime
   endsAt            DateTime?
@@ -689,7 +759,7 @@ model EventParticipation {
 
 model EventComment {
   id        String   @id @default(cuid())
-  content   String
+  content   String   @db.Text
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   eventId   String
@@ -703,7 +773,7 @@ model EventComment {
 
 model EventUpdate {
   id          String   @id @default(cuid())
-  content     String
+  content     String   @db.Text
   isImportant Boolean  @default(false)
   createdAt   DateTime @default(now())
   eventId     String
@@ -864,23 +934,56 @@ model ProgressRecord {
 }
 
 model AITokenLimit {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  tier      String   @default("FREE")
-  limit     Int      @default(150)
-  usage     Int      @default(0)
-  resetAt   DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  tier                 String             @default("FREE")
+  limit                Int                @default(150)
+  usage                Int                @default(0)
+  resetAt              DateTime
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenUsageStats      AITokenUsageStat[]
+  monthlyAllocation    Int                @default(5000) // Monthly token allocation
+  previousMonthCarry   Int                @default(0) // Tokens carried over from previous month
+  bonusTokens          Int                @default(0) // Bonus tokens from promotions
+  lifetimeUsage        Int                @default(0) // Total lifetime token usage
+  lifetimeAllocated    Int                @default(0) // Total lifetime token allocation
+  lastActivity         DateTime? // Last AI activity timestamp
+  tokenRefreshSchedule String? // Cron expression for token refresh (tier-dependent)
+}
+
+model AITokenUsageStat {
+  id               String       @id @default(cuid())
+  tokenLimitId     String
+  operationType    String // Type of operation (chat, content analysis, recommendation, etc.)
+  tokensUsed       Int // Number of tokens used in this operation
+  model            String // Model used for the operation
+  timestamp        DateTime     @default(now())
+  endpoint         String? // API endpoint or function called
+  featureArea      String? // Area of the application (health, chat, content, etc.)
+  prompt           String? // The prompt used (sanitized/truncated for privacy)
+  promptTokens     Int? // Number of tokens in the prompt
+  completionTokens Int? // Number of tokens in the completion
+  success          Boolean      @default(true) // Whether the operation was successful
+  errorCode        String? // Error code if the operation failed
+  metadata         Json? // Additional metadata for analysis
+  responseTime     Int? // Response time in milliseconds
+  tokenLimit       AITokenLimit @relation(fields: [tokenLimitId], references: [id], onDelete: Cascade)
+
+  @@index([tokenLimitId])
+  @@index([timestamp])
+  @@index([operationType])
+  @@index([model])
+  @@index([featureArea])
 }
 
 model AIContentAnalysis {
   id                   String   @id @default(cuid())
   userId               String
-  content              String
+  content              String   @db.Text
   sentiment            String
-  topics               String
+  topics               String   @db.Text
   engagementPrediction String
   modelUsed            String
   tokenUsage           Int
@@ -894,8 +997,8 @@ model AIHealthRecommendation {
   id              String        @id @default(cuid())
   userId          String
   healthProfileId String
-  goals           String
-  recommendations String
+  goals           String        @db.Text
+  recommendations String        @db.Text
   modelUsed       String
   tokenUsage      Int
   createdAt       DateTime      @default(now())
@@ -988,7 +1091,7 @@ model PushDevice {
 model ScheduledNotification {
   id                String                @id @default(cuid())
   type              NotificationType
-  content           String?
+  content           String?               @db.Text
   scheduledFor      DateTime
   recurring         Boolean               @default(false)
   recurrencePattern String?
@@ -1019,10 +1122,10 @@ model ScheduledNotification {
 model NotificationTemplate {
   id                     String                  @id @default(cuid())
   name                   String
-  description            String?
+  description            String?                 @db.Text
   type                   NotificationType
   titleTemplate          String?
-  contentTemplate        String
+  contentTemplate        String                  @db.Text
   actionLabel            String?
   actionUrlTemplate      String?
   imageUrl               String?
@@ -1057,23 +1160,59 @@ model NotificationLog {
 model AIChatInteraction {
   id          String   @id @default(cuid())
   userId      String
-  userMessage String
-  aiResponse  String
+  userMessage String   @db.Text
+  aiResponse  String   @db.Text
   modelUsed   String
   tokenUsage  Int
   createdAt   DateTime @default(now())
+  personality String?  @default("default")
+  metadata    Json?
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([createdAt])
+}
+
+model AIChatMemory {
+  id         String    @id @default(cuid())
+  userId     String
+  type       String // short-term, long-term, episodic, semantic
+  content    String    @db.Text
+  importance Int       @default(5) // 1-10 scale
+  context    String?   @db.Text
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  expiresAt  DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([importance])
+  @@index([createdAt])
+}
+
+model UserPreference {
+  id        String   @id @default(cuid())
+  userId    String
+  key       String
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([userId])
+  @@index([key])
 }
 
 model Group {
   id                  String                 @id @default(cuid())
   name                String
   handle              String                 @unique
-  description         String?
+  description         String?                @db.Text
   privacy             GroupPrivacy           @default(PUBLIC)
-  rules               String?
+  rules               String?                @db.Text
   logoImage           String?
   coverImage          String?
   isVerified          Boolean                @default(false)
@@ -1103,7 +1242,7 @@ model Group {
 
 model GroupSettings {
   id                          String  @id @default(cuid())
-  welcomeMessage              String?
+  welcomeMessage              String? @db.Text
   primaryColor                String?
   enableMemberList            Boolean @default(true)
   enableDiscussions           Boolean @default(true)
@@ -1187,7 +1326,7 @@ model GroupJoinRequest {
 
 model GroupPost {
   id             String             @id @default(cuid())
-  content        String
+  content        String             @db.Text
   status         GroupContentStatus @default(PUBLISHED)
   isPinned       Boolean            @default(false)
   isAnnouncement Boolean            @default(false)
@@ -1212,7 +1351,7 @@ model GroupPost {
 
 model GroupComment {
   id        String             @id @default(cuid())
-  content   String
+  content   String             @db.Text
   status    GroupContentStatus @default(PUBLISHED)
   isEdited  Boolean            @default(false)
   createdAt DateTime           @default(now())
@@ -1251,7 +1390,7 @@ model GroupReaction {
 model GroupDiscussionTopic {
   id        String                 @id @default(cuid())
   title     String
-  content   String
+  content   String                 @db.Text
   isLocked  Boolean                @default(false)
   isPinned  Boolean                @default(false)
   viewCount Int                    @default(0)
@@ -1269,7 +1408,7 @@ model GroupDiscussionTopic {
 
 model GroupDiscussionReply {
   id               String                 @id @default(cuid())
-  content          String
+  content          String                 @db.Text
   isEdited         Boolean                @default(false)
   isAcceptedAnswer Boolean                @default(false)
   createdAt        DateTime               @default(now())
@@ -1309,7 +1448,7 @@ model GroupFile {
 model GroupEvent {
   id           String                    @id @default(cuid())
   title        String
-  description  String?
+  description  String?                   @db.Text
   location     String?
   isOnline     Boolean                   @default(false)
   onlineUrl    String?
@@ -1344,8 +1483,8 @@ model GroupEventParticipation {
 
 model GroupPoll {
   id            String            @id @default(cuid())
-  question      String
-  description   String?
+  question      String            @db.Text
+  description   String?           @db.Text
   isMultiChoice Boolean           @default(false)
   isAnonymous   Boolean           @default(false)
   expiresAt     DateTime?
@@ -1390,9 +1529,9 @@ model GroupPollVote {
 model GroupBadge {
   id          String                 @id @default(cuid())
   name        String
-  description String?
+  description String?                @db.Text
   image       String?
-  criteria    String?
+  criteria    String?                @db.Text
   points      Int                    @default(0)
   createdAt   DateTime               @default(now())
   userId      String?
@@ -1422,7 +1561,7 @@ model GroupBadgeAssignment {
 model GroupReport {
   id             String       @id @default(cuid())
   type           ReportType
-  reason         String
+  reason         String       @db.Text
   status         ReportStatus @default(PENDING)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt

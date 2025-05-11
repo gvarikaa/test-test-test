@@ -5,10 +5,52 @@ import {
   analyzeContent,
   generateHealthRecommendations,
   GeminiModel,
-  createChatSession
+  createChatSession,
+  analyzeImage,
+  getModelInstance,
+  ModelPreset,
+  getModelPreset,
+  SafetyLevel,
+  ContextSize
 } from '@/lib/gemini';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
-// Import necessary modules
+import {
+  TokenTier,
+  TOKEN_TIER_LIMITS,
+  MONTHLY_ALLOCATIONS,
+  TOKEN_COSTS,
+  initializeTokenLimit,
+  checkTokenAvailability,
+  recordTokenUsage,
+  resetTokenUsage,
+  upgradeTier as upgradeUserTier,
+  getTokenUsageStats,
+  grantBonusTokens,
+  estimateTokenCount
+} from '@/lib/token-management';
+import {
+  detectLanguage,
+  translateText,
+  analyzeLanguageQuality,
+  generateMultilingualContent,
+  SupportedLanguage,
+  LANGUAGE_NAMES
+} from '@/lib/multilingual';
+import {
+  ChatPersonality,
+  MemoryType,
+  createMemoryItem,
+  getUserMemories,
+  updateMemoryImportance,
+  deleteMemory,
+  extractMemoryFromChat,
+  buildChatContext,
+  getPersonalityPrompt,
+  getPersonalityTemperature,
+  getAvailablePersonalities,
+  getUserPreferredPersonality,
+  setUserPreferredPersonality
+} from '@/lib/chat-memory';
 
 // Token tiers
 const TOKEN_TIERS = {
@@ -34,60 +76,15 @@ export const aiRouter = router({
       try {
         const userId = ctx.session.user.id;
 
-        // Check if aiTokenLimit is available
-        if (!ctx.db.aiTokenLimit) {
-          console.error('aiTokenLimit model not available in database context');
-          // Return a default token limit
-          return {
-            tier: 'FREE',
-            limit: TOKEN_TIERS.FREE,
-            usage: 0,
-            resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-          };
-        }
-
-        // Check for a token limit record
-        let tokenLimit = await ctx.db.aiTokenLimit.findUnique({
-          where: { userId },
-        });
-
-        // Create a new record if one doesn't exist
-        if (!tokenLimit) {
-          try {
-            tokenLimit = await ctx.db.aiTokenLimit.create({
-              data: {
-                userId,
-                tier: 'FREE',
-                limit: TOKEN_TIERS.FREE,
-                usage: 0,
-                resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Reset in 24 hours
-              },
-            });
-          } catch (error) {
-            console.error('Error creating token limit record:', error);
-            // Return a default token limit if creation fails
-            return {
-              tier: 'FREE',
-              limit: TOKEN_TIERS.FREE,
-              usage: 0,
-              resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-            };
-          }
-        }
+        // Use the token management service to get or create the token limit
+        let tokenLimit = await initializeTokenLimit(userId);
 
         // Check if the reset time has passed
         if (tokenLimit.resetAt < new Date()) {
-          try {
-            tokenLimit = await ctx.db.aiTokenLimit.update({
-              where: { userId },
-              data: {
-                usage: 0,
-                resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Reset in 24 hours
-              },
-            });
-          } catch (error) {
-            console.error('Error updating token limit reset time:', error);
-          }
+          await resetTokenUsage(userId);
+          tokenLimit = await ctx.db.aiTokenLimit.findUnique({
+            where: { userId },
+          }) || tokenLimit;
         }
 
         return {
@@ -95,16 +92,52 @@ export const aiRouter = router({
           limit: tokenLimit.limit,
           usage: tokenLimit.usage,
           resetAt: tokenLimit.resetAt,
+          monthlyAllocation: tokenLimit.monthlyAllocation,
+          previousMonthCarry: tokenLimit.previousMonthCarry,
+          bonusTokens: tokenLimit.bonusTokens,
+          lifetimeUsage: tokenLimit.lifetimeUsage,
+          lifetimeAllocated: tokenLimit.lifetimeAllocated,
+          lastActivity: tokenLimit.lastActivity,
         };
       } catch (error) {
         console.error('Error in getTokenLimit:', error);
         // Return default values if anything fails
         return {
-          tier: 'FREE',
-          limit: TOKEN_TIERS.FREE,
+          tier: TokenTier.FREE,
+          limit: TOKEN_TIER_LIMITS[TokenTier.FREE],
           usage: 0,
           resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          monthlyAllocation: MONTHLY_ALLOCATIONS[TokenTier.FREE],
+          previousMonthCarry: 0,
+          bonusTokens: 0,
+          lifetimeUsage: 0,
+          lifetimeAllocated: 0,
         };
+      }
+    }),
+
+  // Get token usage statistics
+  getTokenUsageStats: protectedProcedure
+    .input(
+      z.object({
+        timeframe: z.enum(['day', 'week', 'month', 'year']).optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      try {
+        const userId = ctx.session.user.id;
+        const { timeframe = 'month' } = input;
+
+        // Get token usage statistics using the token management service
+        const stats = await getTokenUsageStats(userId, timeframe);
+
+        return stats;
+      } catch (error) {
+        console.error('Error in getTokenUsageStats:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to retrieve token usage statistics',
+        });
       }
     }),
   
@@ -113,96 +146,121 @@ export const aiRouter = router({
     .input(
       z.object({
         content: z.string().min(1).max(5000),
-        model: z.enum(['gemini-1.5-pro', '2.5-flash']).optional(),
+        model: z.enum([
+          'gemini-1.5-pro',
+          'gemini-pro',
+          '2.5-flash',
+          'gemini-1.5-pro-vision',
+          'gemini-pro-vision'
+        ]).optional(),
+        analysisType: z.enum(['standard', 'detailed', 'sentiment', 'moderation']).optional(),
+        modelPreset: z.enum(['default', 'creative', 'balanced', 'precise']).optional(),
+        safetyLevel: z.enum(['minimal', 'standard', 'strict', 'maximum']).optional(),
+        contextSize: z.enum(['small', 'medium', 'large', 'maximum']).optional(),
+        customConfig: z.object({
+          temperature: z.number().min(0).max(1).optional(),
+          topK: z.number().optional(),
+          topP: z.number().min(0).max(1).optional(),
+          maxOutputTokens: z.number().optional(),
+        }).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       try {
         const userId = ctx.session.user.id;
-        const { content, model = GeminiModel.PRO } = input;
+        const {
+          content,
+          model = GeminiModel.PRO_1_5,
+          analysisType = 'standard',
+          modelPreset = 'balanced',
+          safetyLevel = 'standard',
+          contextSize,
+          customConfig = {}
+        } = input;
 
-        // Check if aiTokenLimit is available
-        if (!ctx.db.aiTokenLimit) {
-          console.error('aiTokenLimit model not available in database context');
-          // Proceed without token checking
-          const analysis = await analyzeContent(content, model);
-          return {
-            analysis,
-            tokenUsage: TOKEN_COSTS.CONTENT_ANALYSIS,
-          };
-        }
+        // Check if tokens are available for this operation
+        const operationCost = TOKEN_COSTS.CONTENT_ANALYSIS[analysisType];
+        const hasTokens = await checkTokenAvailability(userId, 'CONTENT_ANALYSIS', analysisType);
 
-        // Check token limits
-        let tokenLimit;
-        try {
-          tokenLimit = await ctx.db.aiTokenLimit.findUnique({
-            where: { userId },
+        if (!hasTokens) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Token limit exceeded',
           });
-
-          if (!tokenLimit) {
-            // Create a new token limit record
-            tokenLimit = await ctx.db.aiTokenLimit.create({
-              data: {
-                userId,
-                tier: 'FREE',
-                limit: TOKEN_TIERS.FREE,
-                usage: 0,
-                resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Reset in 24 hours
-              },
-            });
-          }
-
-          if (tokenLimit.usage + TOKEN_COSTS.CONTENT_ANALYSIS > tokenLimit.limit) {
-            throw new TRPCError({
-              code: 'FORBIDDEN',
-              message: 'Token limit exceeded',
-            });
-          }
-        } catch (error) {
-          console.error('Error checking token limits:', error);
-          // Proceed without token checking
         }
+
+        // Prepare generation parameters
+        const params = customConfig && Object.keys(customConfig).length > 0
+          ? customConfig
+          : getModelPreset(modelPreset as ModelPreset);
+
+        // Get context size enumeration if specified
+        const contextSizeEnum = contextSize
+          ? ContextSize[contextSize.toUpperCase() as keyof typeof ContextSize]
+          : undefined;
 
         // Analyze the content
-        const analysis = await analyzeContent(content, model);
+        const startTime = Date.now();
+        const analysis = await analyzeContent(
+          content,
+          model as GeminiModel,
+          analysisType as 'standard' | 'detailed' | 'sentiment' | 'moderation',
+          params,
+          safetyLevel as SafetyLevel
+        );
+        const responseTime = Date.now() - startTime;
 
-        // Update token usage if possible
-        try {
-          if (tokenLimit) {
-            await ctx.db.aiTokenLimit.update({
-              where: { userId },
-              data: {
-                usage: tokenLimit.usage + TOKEN_COSTS.CONTENT_ANALYSIS,
-              },
-            });
-          }
+        // Estimate token usage
+        const promptTokens = estimateTokenCount(content) + 300; // Add 300 for system prompts
+        const completionTokens = estimateTokenCount(JSON.stringify(analysis));
+        const totalTokens = operationCost || promptTokens + completionTokens;
 
-          // Create a record of the analysis if possible
-          if (ctx.db.aiContentAnalysis) {
-            await ctx.db.aiContentAnalysis.create({
-              data: {
-                userId,
-                content,
-                sentiment: analysis.sentiment,
-                topics: analysis.topics.join(', '),
-                engagementPrediction: analysis.engagementPrediction,
-                modelUsed: model,
-                tokenUsage: TOKEN_COSTS.CONTENT_ANALYSIS,
-              },
-            });
+        // Record token usage
+        await recordTokenUsage({
+          userId,
+          operationType: 'CONTENT_ANALYSIS',
+          tokensUsed: totalTokens,
+          model: model,
+          endpoint: 'ai.analyzeContent',
+          featureArea: 'content',
+          prompt: content.substring(0, 100) + (content.length > 100 ? '...' : ''),
+          promptTokens,
+          completionTokens,
+          success: true,
+          responseTime,
+          metadata: {
+            analysisType,
+            modelPreset,
+            safetyLevel,
+            contentLength: content.length,
           }
-        } catch (error) {
-          console.error('Error updating token usage or creating analysis record:', error);
+        });
+
+        // Create a record of the analysis
+        if (ctx.db.aiContentAnalysis) {
+          await ctx.db.aiContentAnalysis.create({
+            data: {
+              userId,
+              content: content.substring(0, 500), // Limit stored content for privacy
+              sentiment: analysis.sentiment,
+              topics: analysis.topics.join(', '),
+              engagementPrediction: analysis.engagementPrediction,
+              modelUsed: model,
+              tokenUsage: totalTokens,
+            },
+          });
         }
 
         return {
           analysis,
-          tokenUsage: TOKEN_COSTS.CONTENT_ANALYSIS,
+          tokenUsage: totalTokens,
+          responseTime,
+          model,
         };
       } catch (error) {
         console.error('Error in analyzeContent:', error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
+          code: error instanceof TRPCError ? error.code : 'INTERNAL_SERVER_ERROR',
           message: error instanceof Error ? error.message : 'Failed to analyze content',
         });
       }
@@ -321,125 +379,391 @@ export const aiRouter = router({
           z.object({
             role: z.enum(['user', 'assistant']),
             content: z.string(),
+            timestamp: z.date().optional(),
           })
         ).optional(),
-        model: z.enum(['gemini-1.5-pro', '2.5-flash']).optional(),
+        model: z.enum([
+          'gemini-1.5-pro',
+          'gemini-pro',
+          '2.5-flash'
+        ]).optional(),
+        personality: z.enum([
+          'default',
+          'friendly',
+          'professional',
+          'creative',
+          'concise',
+          'caring',
+          'humorous'
+        ]).optional(),
+        extractMemories: z.boolean().optional(),
+        saveMemories: z.boolean().optional(),
+        useMemories: z.boolean().optional(),
+        contextSize: z.enum(['small', 'medium', 'large', 'maximum']).optional(),
+        memoryToAdd: z.object({
+          content: z.string(),
+          type: z.enum(['short-term', 'long-term', 'episodic', 'semantic']),
+          importance: z.number().min(1).max(10).optional(),
+          context: z.string().optional(),
+        }).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       try {
         const userId = ctx.session.user.id;
-        const { message, context = [], model = GeminiModel.PRO } = input;
+        const {
+          message,
+          context = [],
+          model = GeminiModel.PRO_1_5,
+          personality: requestedPersonality,
+          extractMemories = false,
+          saveMemories = true,
+          useMemories = true,
+          contextSize,
+          memoryToAdd
+        } = input;
 
-        // Check if token models are available
-        let tokenLimit;
-        if (ctx.db.aiTokenLimit) {
-          try {
-            // Check token limits
-            tokenLimit = await ctx.db.aiTokenLimit.findUnique({
-              where: { userId },
-            });
+        // Get message length category for token cost calculation
+        const messageLength = message.length < 100 ? 'short' : message.length < 500 ? 'medium' : 'long';
+        const tokenCost = TOKEN_COSTS.CHAT_MESSAGE[messageLength];
 
-            if (!tokenLimit) {
-              // Create a new token limit record
-              tokenLimit = await ctx.db.aiTokenLimit.create({
-                data: {
-                  userId,
-                  tier: 'FREE',
-                  limit: TOKEN_TIERS.FREE,
-                  usage: 0,
-                  resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Reset in 24 hours
-                },
-              });
-            }
+        // Check if tokens are available
+        const hasTokens = await checkTokenAvailability(userId, 'CHAT_MESSAGE', messageLength);
 
-            if (tokenLimit.usage + TOKEN_COSTS.CHAT_MESSAGE > tokenLimit.limit) {
-              throw new TRPCError({
-                code: 'FORBIDDEN',
-                message: 'Token limit exceeded',
-              });
-            }
-          } catch (error) {
-            console.error('Error checking token limits:', error);
-            // Proceed without token checking if there's an error
-          }
+        if (!hasTokens) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Token limit exceeded',
+          });
         }
 
-        // Create a system prompt
-        const initialPrompt = `
-          You are a helpful AI assistant for the DapDip social network. Your name is DapBot.
+        // Add user memory if provided
+        if (memoryToAdd) {
+          await createMemoryItem(
+            userId,
+            memoryToAdd.type as MemoryType,
+            memoryToAdd.content,
+            memoryToAdd.importance || 5,
+            memoryToAdd.context,
+            { source: 'user-provided' }
+          );
+        }
 
-          About DapDip:
-          - DapDip is a social network focused on connecting people, sharing content, and promoting health and wellness.
-          - The platform features posts, comments, direct messaging, stories, and a special "Better Me" section for health and fitness.
+        // Get user's preferred personality if not specified
+        let personality = requestedPersonality as ChatPersonality | undefined;
+        if (!personality) {
+          personality = await getUserPreferredPersonality(userId);
+        }
 
-          Your capabilities:
-          - Help users with platform navigation and features
-          - Provide content suggestions for posts
-          - Generate ideas for stories and updates
-          - Offer health and wellness advice (but always clarify you're not a medical professional)
-          - Analyze social media trends and topics
+        // Format context with timestamps
+        const formattedContext = context.map(msg => ({
+          ...msg,
+          timestamp: msg.timestamp || new Date(),
+        }));
 
-          Your tone should be friendly, helpful, and conversational. Keep responses concise and focused.
+        // Build chat context with memories if requested
+        let chatContext;
+        if (useMemories) {
+          chatContext = await buildChatContext(
+            userId,
+            formattedContext,
+            personality
+          );
+        }
 
-          Important:
-          - Never provide medical diagnoses or specific medical advice
-          - Respect user privacy and don't ask for personal information
-          - If you don't know something, be honest about it
+        // Get personality-specific system prompt
+        const systemPrompt = getPersonalityPrompt(personality, chatContext);
 
-          Let's help the user in a friendly, helpful way!
-        `;
-
-        // Create a chat session
-        const chat = await createChatSession(model, initialPrompt);
+        // Get personality-specific temperature
+        const temperature = getPersonalityTemperature(personality);
 
         // Convert context format for Gemini API
-        context.map(msg => ({
+        const convertedContext = formattedContext.map(msg => ({
           role: msg.role === 'user' ? 'user' : 'model',
           parts: [{ text: msg.content }],
         }));
 
-        // Send the message and get a response
+        // Get context size enum if specified
+        const contextSizeEnum = contextSize
+          ? ContextSize[contextSize.toUpperCase() as keyof typeof ContextSize]
+          : undefined;
+
+        // Measure start time for performance tracking
+        const startTime = Date.now();
+
+        // Create a chat session with personality and context awareness
+        const chat = await createChatSession(
+          model as GeminiModel,
+          undefined,
+          {
+            temperature,
+            maxOutputTokens: 1024
+          },
+          SafetyLevel.STANDARD,
+          contextSizeEnum,
+          systemPrompt
+        );
+
+        // Add previous context messages
+        if (convertedContext.length > 0) {
+          // Limiting to last 10 messages for better performance
+          for (const msg of convertedContext.slice(-10)) {
+            await chat.sendMessage(msg.parts[0].text);
+          }
+        }
+
+        // Send the new message and get a response
         const result = await chat.sendMessage(message);
         const response = result.response.text();
 
-        // Update token usage if possible
-        try {
-          if (tokenLimit && ctx.db.aiTokenLimit) {
-            await ctx.db.aiTokenLimit.update({
-              where: { userId },
-              data: {
-                usage: tokenLimit.usage + TOKEN_COSTS.CHAT_MESSAGE,
-              },
-            });
-          }
+        // Measure response time
+        const responseTime = Date.now() - startTime;
 
-          // Log the interaction if model exists
-          if (ctx.db.aiChatInteraction) {
-            await ctx.db.aiChatInteraction.create({
-              data: {
-                userId,
-                userMessage: message,
-                aiResponse: response,
-                modelUsed: model,
-                tokenUsage: TOKEN_COSTS.CHAT_MESSAGE,
-              },
-            });
-          }
-        } catch (error) {
-          console.error('Error updating token usage or creating chat record:', error);
+        // Extract memories from conversation if requested
+        if (extractMemories && saveMemories && formattedContext.length >= 3) {
+          extractMemoryFromChat(
+            userId,
+            [...formattedContext, { role: 'user', content: message }, { role: 'assistant', content: response }],
+            model as GeminiModel
+          ).catch(error => {
+            console.error('Error extracting memories:', error);
+          });
         }
+
+        // Estimate token usage
+        const promptTokens = estimateTokenCount(systemPrompt + message) +
+          formattedContext.slice(-10).reduce((sum, msg) => sum + estimateTokenCount(msg.content), 0);
+        const completionTokens = estimateTokenCount(response);
+        const totalTokens = promptTokens + completionTokens;
+
+        // Record token usage
+        await recordTokenUsage({
+          userId,
+          operationType: 'CHAT_MESSAGE',
+          tokensUsed: totalTokens,
+          model: model,
+          endpoint: 'ai.chatWithAssistant',
+          featureArea: 'chat',
+          prompt: message.substring(0, 100) + (message.length > 100 ? '...' : ''),
+          promptTokens,
+          completionTokens,
+          success: true,
+          responseTime,
+          metadata: {
+            messageLength,
+            contextLength: formattedContext.length,
+            personality,
+            usedMemories: useMemories,
+            extractedMemories: extractMemories,
+          }
+        });
+
+        // Log the interaction
+        await ctx.db.aiChatInteraction.create({
+          data: {
+            userId,
+            userMessage: message,
+            aiResponse: response,
+            modelUsed: model,
+            tokenUsage: totalTokens,
+            personality,
+            metadata: {
+              messageLength,
+              contextLength: formattedContext.length,
+              usedMemories: useMemories,
+              extractedMemories: extractMemories,
+              responseTime,
+            },
+          },
+        });
 
         return {
           response,
-          tokenUsage: TOKEN_COSTS.CHAT_MESSAGE,
+          tokenUsage: totalTokens,
+          personality,
+          responseTime,
+          model,
         };
-      } catch (err: unknown) {
-        console.error('Error in AI chat:', err);
-        const errorMessage = err instanceof Error ? err.message : 'Failed to get AI response';
+      } catch (error) {
+        console.error('Error in AI chat:', error);
+        throw new TRPCError({
+          code: error instanceof TRPCError ? error.code : 'INTERNAL_SERVER_ERROR',
+          message: error instanceof Error ? error.message : 'Failed to get AI response',
+        });
+      }
+    }),
+
+  // Get user chat memories
+  getChatMemories: protectedProcedure
+    .input(
+      z.object({
+        type: z.enum(['short-term', 'long-term', 'episodic', 'semantic']).optional(),
+        limit: z.number().min(1).max(100).optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      try {
+        const userId = ctx.session.user.id;
+        const { type, limit } = input;
+
+        // Get user memories
+        const memories = await getUserMemories(
+          userId,
+          type as MemoryType | undefined,
+          limit
+        );
+
+        return memories;
+      } catch (error) {
+        console.error('Error getting chat memories:', error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
-          message: errorMessage,
+          message: 'Failed to retrieve chat memories',
+        });
+      }
+    }),
+
+  // Add a new memory item
+  createChatMemory: protectedProcedure
+    .input(
+      z.object({
+        content: z.string().min(1).max(1000),
+        type: z.enum(['short-term', 'long-term', 'episodic', 'semantic']),
+        importance: z.number().min(1).max(10).optional(),
+        context: z.string().optional(),
+        metadata: z.record(z.any()).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const userId = ctx.session.user.id;
+        const { content, type, importance = 5, context, metadata } = input;
+
+        // Create memory item
+        const memory = await createMemoryItem(
+          userId,
+          type as MemoryType,
+          content,
+          importance,
+          context,
+          metadata
+        );
+
+        return memory;
+      } catch (error) {
+        console.error('Error creating chat memory:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to create chat memory',
+        });
+      }
+    }),
+
+  // Delete a memory item
+  deleteChatMemory: protectedProcedure
+    .input(
+      z.object({
+        memoryId: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const userId = ctx.session.user.id;
+        const { memoryId } = input;
+
+        // Verify memory belongs to user
+        const memory = await ctx.db.aIChatMemory.findFirst({
+          where: {
+            id: memoryId,
+            userId,
+          },
+        });
+
+        if (!memory) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Memory not found',
+          });
+        }
+
+        // Delete memory
+        await deleteMemory(memoryId);
+
+        return { success: true };
+      } catch (error) {
+        console.error('Error deleting chat memory:', error);
+        throw new TRPCError({
+          code: error instanceof TRPCError ? error.code : 'INTERNAL_SERVER_ERROR',
+          message: error instanceof Error ? error.message : 'Failed to delete chat memory',
+        });
+      }
+    }),
+
+  // Get available chat personalities
+  getChatPersonalities: protectedProcedure
+    .query(async () => {
+      try {
+        // Get available personalities
+        const personalities = getAvailablePersonalities();
+
+        return personalities;
+      } catch (error) {
+        console.error('Error getting chat personalities:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to retrieve chat personalities',
+        });
+      }
+    }),
+
+  // Get user's preferred chat personality
+  getUserPersonality: protectedProcedure
+    .query(async ({ ctx }) => {
+      try {
+        const userId = ctx.session.user.id;
+
+        // Get user's preferred personality
+        const personality = await getUserPreferredPersonality(userId);
+
+        return { personality };
+      } catch (error) {
+        console.error('Error getting user personality:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to retrieve user personality',
+        });
+      }
+    }),
+
+  // Set user's preferred chat personality
+  setUserPersonality: protectedProcedure
+    .input(
+      z.object({
+        personality: z.enum([
+          'default',
+          'friendly',
+          'professional',
+          'creative',
+          'concise',
+          'caring',
+          'humorous'
+        ]),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const userId = ctx.session.user.id;
+        const { personality } = input;
+
+        // Set user's preferred personality
+        await setUserPreferredPersonality(userId, personality as ChatPersonality);
+
+        return { success: true, personality };
+      } catch (error) {
+        console.error('Error setting user personality:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to set user personality',
         });
       }
     }),
@@ -455,25 +779,254 @@ export const aiRouter = router({
       const userId = ctx.session.user.id;
       const { tier } = input;
 
-      // In a real app, this would involve payment processing
-      // For now, we'll just update the tier
-
-      const updatedLimit = await ctx.db.aiTokenLimit.update({
-        where: { userId },
-        data: {
-          tier,
-          limit: TOKEN_TIERS[tier],
-          // Don't reset usage, but extend the reset time
-          resetAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-        },
+      // Upgrade user tier using token management service
+      await upgradeUserTier(userId, {
+        tier: tier as TokenTier,
+        resetType: 'none',
+        bonusTokens: 50, // Bonus tokens for upgrading
       });
 
+      // Get the updated token limit
+      const tokenLimit = await ctx.db.aiTokenLimit.findUnique({
+        where: { userId },
+      });
+
+      if (!tokenLimit) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Token limit not found after upgrade',
+        });
+      }
+
       return {
-        tier: updatedLimit.tier,
-        limit: updatedLimit.limit,
-        usage: updatedLimit.usage,
-        resetAt: updatedLimit.resetAt,
+        tier: tokenLimit.tier,
+        limit: tokenLimit.limit,
+        usage: tokenLimit.usage,
+        resetAt: tokenLimit.resetAt,
+        monthlyAllocation: tokenLimit.monthlyAllocation,
+        bonusTokens: tokenLimit.bonusTokens,
       };
+    }),
+
+  // Detect language of text
+  detectLanguage: protectedProcedure
+    .input(
+      z.object({
+        text: z.string().min(1).max(10000),
+        model: z.enum([
+          'gemini-1.5-pro',
+          'gemini-pro'
+        ]).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const userId = ctx.session.user.id;
+        const { text, model = GeminiModel.PRO_1_5 } = input;
+
+        // Check if tokens are available
+        const hasTokens = await checkTokenAvailability(userId, 'TRANSLATION', 'detection');
+
+        if (!hasTokens) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Token limit exceeded',
+          });
+        }
+
+        // Detect language
+        const detectionResult = await detectLanguage(
+          text,
+          userId,
+          model as GeminiModel
+        );
+
+        return detectionResult;
+      } catch (error) {
+        console.error('Error detecting language:', error);
+        throw new TRPCError({
+          code: error instanceof TRPCError ? error.code : 'INTERNAL_SERVER_ERROR',
+          message: error instanceof Error ? error.message : 'Failed to detect language',
+        });
+      }
+    }),
+
+  // Translate text between languages
+  translateText: protectedProcedure
+    .input(
+      z.object({
+        text: z.string().min(1).max(10000),
+        targetLanguage: z.string().min(2).max(5),
+        sourceLanguage: z.string().min(2).max(5).optional(),
+        preserveFormatting: z.boolean().optional(),
+        model: z.enum([
+          'gemini-1.5-pro',
+          'gemini-pro'
+        ]).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const userId = ctx.session.user.id;
+        const {
+          text,
+          targetLanguage,
+          sourceLanguage,
+          preserveFormatting = true,
+          model = GeminiModel.PRO_1_5
+        } = input;
+
+        // Check if tokens are available
+        const hasTokens = await checkTokenAvailability(userId, 'TRANSLATION', 'standard');
+
+        if (!hasTokens) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Token limit exceeded',
+          });
+        }
+
+        // Translate text
+        const translationResult = await translateText(
+          text,
+          targetLanguage as SupportedLanguage,
+          sourceLanguage as SupportedLanguage | undefined,
+          userId,
+          preserveFormatting,
+          model as GeminiModel
+        );
+
+        return translationResult;
+      } catch (error) {
+        console.error('Error translating text:', error);
+        throw new TRPCError({
+          code: error instanceof TRPCError ? error.code : 'INTERNAL_SERVER_ERROR',
+          message: error instanceof Error ? error.message : 'Failed to translate text',
+        });
+      }
+    }),
+
+  // Analyze language quality
+  analyzeLanguageQuality: protectedProcedure
+    .input(
+      z.object({
+        text: z.string().min(1).max(10000),
+        language: z.string().min(2).max(5).optional(),
+        model: z.enum([
+          'gemini-1.5-pro',
+          'gemini-pro'
+        ]).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const userId = ctx.session.user.id;
+        const { text, language, model = GeminiModel.PRO_1_5 } = input;
+
+        // Check if tokens are available
+        const hasTokens = await checkTokenAvailability(userId, 'LANGUAGE_ANALYSIS', 'standard');
+
+        if (!hasTokens) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Token limit exceeded',
+          });
+        }
+
+        // Analyze language quality
+        const analysisResult = await analyzeLanguageQuality(
+          text,
+          language as SupportedLanguage | undefined,
+          userId,
+          model as GeminiModel
+        );
+
+        return analysisResult;
+      } catch (error) {
+        console.error('Error analyzing language quality:', error);
+        throw new TRPCError({
+          code: error instanceof TRPCError ? error.code : 'INTERNAL_SERVER_ERROR',
+          message: error instanceof Error ? error.message : 'Failed to analyze language quality',
+        });
+      }
+    }),
+
+  // Generate multilingual content
+  generateMultilingualContent: protectedProcedure
+    .input(
+      z.object({
+        prompt: z.string().min(1).max(1000),
+        targetLanguage: z.string().min(2).max(5),
+        contentType: z.enum(['post', 'comment', 'headline', 'story', 'response']),
+        tone: z.enum(['formal', 'casual', 'professional', 'friendly']).optional(),
+        model: z.enum([
+          'gemini-1.5-pro',
+          'gemini-pro'
+        ]).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const userId = ctx.session.user.id;
+        const {
+          prompt,
+          targetLanguage,
+          contentType,
+          tone = 'casual',
+          model = GeminiModel.PRO_1_5
+        } = input;
+
+        // Check if tokens are available
+        const hasTokens = await checkTokenAvailability(userId, 'MULTILINGUAL_GENERATION', 'standard');
+
+        if (!hasTokens) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Token limit exceeded',
+          });
+        }
+
+        // Generate multilingual content
+        const generatedContent = await generateMultilingualContent(
+          prompt,
+          targetLanguage as SupportedLanguage,
+          contentType,
+          tone as 'formal' | 'casual' | 'professional' | 'friendly',
+          userId,
+          model as GeminiModel
+        );
+
+        return {
+          content: generatedContent,
+          targetLanguage,
+          languageName: LANGUAGE_NAMES[targetLanguage] || targetLanguage,
+          contentType
+        };
+      } catch (error) {
+        console.error('Error generating multilingual content:', error);
+        throw new TRPCError({
+          code: error instanceof TRPCError ? error.code : 'INTERNAL_SERVER_ERROR',
+          message: error instanceof Error ? error.message : 'Failed to generate multilingual content',
+        });
+      }
+    }),
+
+  // Get supported languages
+  getSupportedLanguages: protectedProcedure
+    .query(async () => {
+      try {
+        // Return the list of supported languages
+        return Object.entries(LANGUAGE_NAMES).map(([code, name]) => ({
+          code,
+          name
+        }));
+      } catch (error) {
+        console.error('Error getting supported languages:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get supported languages',
+        });
+      }
     }),
 
   // Generate meal plan with AI

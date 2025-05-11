@@ -87,25 +87,29 @@ export default function Post({ post }: PostProps) {
 
       {/* კონტენტი */}
       <div className="px-3 pb-3">
-        <p className="mb-3 whitespace-pre-line text-text-primary">{post.content}</p>
-        
+        <Link href={`/posts/${post.id}`} className="block mb-3 whitespace-pre-line text-text-primary hover:underline">
+          <p>{post.content}</p>
+        </Link>
+
         {post.images && post.images.length > 0 && (
-          <div className={`overflow-hidden rounded-lg ${post.images.length === 1 ? '' : 'grid grid-cols-2 gap-1'}`}>
-            {post.images.map((image, index) => (
-              <Image
-                key={index}
-                src={image}
-                alt={`Post image ${index + 1}`}
-                width={500}
-                height={500}
-                className="w-full object-cover"
-                style={{ 
-                  maxHeight: post.images && post.images.length === 1 ? '500px' : '250px',
-                  height: post.images && post.images.length === 1 ? 'auto' : '250px'
-                }}
-              />
-            ))}
-          </div>
+          <Link href={`/posts/${post.id}`} className="block">
+            <div className={`overflow-hidden rounded-lg ${post.images.length === 1 ? '' : 'grid grid-cols-2 gap-1'}`}>
+              {post.images.map((image, index) => (
+                <Image
+                  key={index}
+                  src={image}
+                  alt={`Post image ${index + 1}`}
+                  width={500}
+                  height={500}
+                  className="w-full object-cover"
+                  style={{
+                    maxHeight: post.images && post.images.length === 1 ? '500px' : '250px',
+                    height: post.images && post.images.length === 1 ? 'auto' : '250px'
+                  }}
+                />
+              ))}
+            </div>
+          </Link>
         )}
       </div>
 

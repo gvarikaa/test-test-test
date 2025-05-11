@@ -11,6 +11,9 @@ import { groupRouter } from './routers/group';
 import { reelRouter } from './routers/reel';
 import { storyRouter } from './routers/story';
 import { eventRouter } from './routers/event';
+import { personalizationRouter } from './routers/personalization';
+import { seoRouter } from './routers/seo';
+import { commentAnalysisRouter } from './routers/comment-analysis';
 
 export const appRouter = router({
   user: userRouter,
@@ -25,6 +28,9 @@ export const appRouter = router({
   reel: reelRouter,
   story: storyRouter,
   event: eventRouter,
+  personalization: personalizationRouter,
+  seo: seoRouter,
+  commentAnalysis: commentAnalysisRouter,
 });
 
 export type AppRouter = typeof appRouter;

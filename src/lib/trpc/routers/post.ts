@@ -9,12 +9,107 @@ export const postRouter = router({
       z.object({
         limit: z.number().min(1).max(100).default(10),
         cursor: z.string().nullish(),
+        personalized: z.boolean().default(false),
       })
     )
     .query(async ({ ctx, input }) => {
-      const { limit, cursor } = input;
+      const { limit, cursor, personalized } = input;
       const userId = ctx.session?.user?.id;
 
+      // If user is logged in and wants personalized content, use personalization system
+      if (personalized && userId) {
+        try {
+          // Import the personalization function
+          const { generatePersonalizedFeed, ContentType } = await import('@/lib/personalization');
+
+          // Get personalized content IDs with scores and reasons
+          const recommendations = await generatePersonalizedFeed(
+            userId,
+            ContentType.POST,
+            limit + (cursor ? 1 : 0) // Add one extra if we have a cursor
+          );
+
+          // Extract just the IDs, preserving order
+          let postIds = recommendations.map(rec => rec.id);
+
+          // Apply cursor if provided
+          if (cursor) {
+            const cursorIndex = postIds.indexOf(cursor);
+            if (cursorIndex !== -1) {
+              postIds = postIds.slice(cursorIndex + 1);
+            }
+          }
+
+          // Fetch the actual posts
+          const posts = await ctx.db.post.findMany({
+            where: {
+              id: {
+                in: postIds,
+              },
+              published: true,
+            },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                  image: true,
+                },
+              },
+              media: true,
+              _count: {
+                select: {
+                  reactions: true,
+                  comments: true,
+                },
+              },
+              aiAnalysis: {
+                select: {
+                  id: true,
+                  sentiment: true,
+                  topics: true,
+                },
+              },
+            },
+          });
+
+          // Re-sort to match the original recommendation order
+          const sortedPosts = postIds
+            .map(id => posts.find(post => post.id === id))
+            .filter(Boolean);
+
+          // Determine next cursor
+          let nextCursor: typeof cursor = undefined;
+          if (sortedPosts.length > 0 && recommendations.length > postIds.length) {
+            nextCursor = sortedPosts[sortedPosts.length - 1]?.id;
+          }
+
+          // Add recommendation metadata to each post
+          const postsWithRecommendationData = sortedPosts.map(post => {
+            const recommendation = recommendations.find(rec => rec.id === post?.id);
+            return {
+              ...post,
+              recommendationMetadata: recommendation ? {
+                reason: recommendation.reason,
+                source: recommendation.source,
+                score: recommendation.score,
+                explanation: recommendation.metadata?.explanation,
+              } : null,
+            };
+          });
+
+          return {
+            posts: postsWithRecommendationData,
+            nextCursor,
+          };
+        } catch (error) {
+          console.error('Error fetching personalized posts:', error);
+          // Fall back to standard feed if personalization fails
+        }
+      }
+
+      // Standard non-personalized feed or fallback
       // Build the where clause
       const whereClause: {
         published: boolean;
@@ -66,6 +161,13 @@ export const postRouter = router({
             select: {
               reactions: true,
               comments: true,
+            },
+          },
+          aiAnalysis: {
+            select: {
+              id: true,
+              sentiment: true,
+              topics: true,
             },
           },
         },
@@ -141,7 +243,17 @@ export const postRouter = router({
               savedBy: true,
             },
           },
-          aiAnalysis: true,
+          aiAnalysis: {
+            select: {
+              id: true,
+              sentiment: true,
+              topics: true,
+              suggestions: true,
+              detectedEntities: true,
+              modelVersion: true,
+              createdAt: true
+            }
+          },
         },
       });
 
@@ -269,15 +381,99 @@ export const postRouter = router({
 
       // Perform AI analysis if requested
       if (runAiAnalysis) {
-        // For now, create an empty AI analysis record
-        // The actual analysis will be implemented with Gemini later
-        await ctx.db.aIAnalysis.create({
-          data: {
-            postId: post.id,
-            sentiment: 'PENDING',
-            modelVersion: 'PENDING',
-          },
-        });
+        try {
+          // Import the Gemini analysis function and ContentAnalysis type
+          const { analyzeContent, GeminiModel, ContentAnalysis } = await import('@/lib/gemini');
+
+          // Perform content analysis
+          const analysis = await analyzeContent(
+            content,
+            GeminiModel.PRO_1_5,
+            'standard'
+          );
+
+          // Save the analysis result
+          await ctx.db.aIAnalysis.create({
+            data: {
+              postId: post.id,
+              sentiment: analysis.sentiment,
+              topics: analysis.topics.join(', '),
+              suggestions: analysis.suggestions.join('\n'),
+              detectedEntities: JSON.stringify(analysis.entities),
+              modelVersion: GeminiModel.PRO_1_5,
+            },
+          });
+
+          // Record token usage if available
+          if (ctx.db.aiTokenUsageStat) {
+            try {
+              const { estimateTokenCount } = await import('@/lib/token-management');
+              const promptTokens = estimateTokenCount(content) + 300; // Add 300 for system prompts
+              const completionTokens = estimateTokenCount(JSON.stringify(analysis));
+              const totalTokens = promptTokens + completionTokens;
+
+              // Try to find or create token limit for the user
+              let tokenLimit = await ctx.db.aiTokenLimit.findUnique({
+                where: { userId: ctx.session.user.id },
+              });
+
+              if (!tokenLimit) {
+                // Initialize token limit if it doesn't exist
+                tokenLimit = await ctx.db.aiTokenLimit.create({
+                  data: {
+                    userId: ctx.session.user.id,
+                    tier: 'FREE',
+                    limit: 150,
+                    usage: totalTokens,
+                    resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                  },
+                });
+              } else {
+                // Update existing token limit
+                await ctx.db.aiTokenLimit.update({
+                  where: { userId: ctx.session.user.id },
+                  data: {
+                    usage: tokenLimit.usage + totalTokens,
+                  },
+                });
+              }
+
+              // Record token usage statistics
+              await ctx.db.aiTokenUsageStat.create({
+                data: {
+                  tokenLimitId: tokenLimit.id,
+                  operationType: 'CONTENT_ANALYSIS',
+                  tokensUsed: totalTokens,
+                  model: GeminiModel.PRO_1_5,
+                  endpoint: 'post.create',
+                  featureArea: 'post',
+                  promptTokens,
+                  completionTokens,
+                  success: true,
+                  metadata: {
+                    postId: post.id,
+                    analysisType: 'standard',
+                    contentLength: content.length,
+                  },
+                },
+              });
+            } catch (tokenError) {
+              console.error('Error recording token usage:', tokenError);
+              // Continue without token tracking if it fails
+            }
+          }
+        } catch (analysisError) {
+          console.error('Error performing AI analysis:', analysisError);
+          // Create a placeholder record if analysis fails
+          await ctx.db.aIAnalysis.create({
+            data: {
+              postId: post.id,
+              sentiment: 'ERROR',
+              topics: 'Analysis failed',
+              modelVersion: 'ERROR',
+            },
+          });
+        }
       }
 
       return post;
@@ -361,6 +557,131 @@ export const postRouter = router({
       });
 
       return { success: true };
+    }),
+
+  getPersonalizedFeed: protectedProcedure
+    .input(
+      z.object({
+        limit: z.number().min(1).max(50).default(20),
+        cursor: z.string().nullish(),
+        includeReasons: z.boolean().default(true),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { limit, cursor, includeReasons } = input;
+      const userId = ctx.session.user.id;
+
+      try {
+        // Import the personalization function
+        const { generatePersonalizedFeed, ContentType, UserBehaviorType, logUserBehavior } = await import('@/lib/personalization');
+
+        // Generate personalized recommendations
+        const recommendations = await generatePersonalizedFeed(
+          userId,
+          ContentType.POST,
+          limit + (cursor ? 1 : 0) // Add one extra if we have a cursor
+        );
+
+        // Extract just the IDs, preserving order
+        let postIds = recommendations.map(rec => rec.id);
+
+        // Apply cursor if provided
+        if (cursor) {
+          const cursorIndex = postIds.indexOf(cursor);
+          if (cursorIndex !== -1) {
+            postIds = postIds.slice(cursorIndex + 1);
+          }
+        }
+
+        // Fetch the actual posts
+        const posts = await ctx.db.post.findMany({
+          where: {
+            id: {
+              in: postIds,
+            },
+            published: true,
+          },
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                image: true,
+              },
+            },
+            media: true,
+            _count: {
+              select: {
+                reactions: true,
+                comments: true,
+              },
+            },
+            aiAnalysis: {
+              select: {
+                id: true,
+                sentiment: true,
+                topics: true,
+                suggestions: true,
+              },
+            },
+          },
+        });
+
+        // Re-sort to match the original recommendation order
+        const sortedPosts = postIds
+          .map(id => posts.find(post => post.id === id))
+          .filter(Boolean);
+
+        // Determine next cursor
+        let nextCursor: typeof cursor = undefined;
+        if (sortedPosts.length > 0 && recommendations.length > postIds.length) {
+          nextCursor = sortedPosts[sortedPosts.length - 1]?.id;
+        }
+
+        // Add recommendation metadata to each post if requested
+        const result = sortedPosts.map(post => {
+          const recommendation = recommendations.find(rec => rec.id === post?.id);
+
+          if (includeReasons && recommendation) {
+            return {
+              ...post,
+              recommendationMetadata: {
+                reason: recommendation.reason,
+                source: recommendation.source,
+                score: recommendation.score,
+                explanation: recommendation.metadata?.explanation,
+              },
+            };
+          }
+
+          return post;
+        });
+
+        // Log user behavior for viewing feed
+        logUserBehavior(
+          userId,
+          UserBehaviorType.VIEW,
+          'feed',
+          ContentType.POST,
+          {
+            timestamp: new Date(),
+            recommendationCount: result.length,
+            sources: [...new Set(recommendations.map(rec => rec.source))],
+          }
+        ).catch(e => console.error('Error logging feed view:', e));
+
+        return {
+          posts: result,
+          nextCursor,
+        };
+      } catch (error) {
+        console.error('Error fetching personalized feed:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to generate personalized feed',
+        });
+      }
     }),
 
   react: protectedProcedure
@@ -601,6 +922,279 @@ export const postRouter = router({
         savedPosts: savedPosts.map((savedPost) => savedPost.post),
         nextCursor,
       };
+    }),
+
+  getPostAnalytics: protectedProcedure
+    .input(
+      z.object({
+        timeframe: z.enum(['week', 'month', 'all']).default('month'),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { timeframe } = input;
+      const userId = ctx.session.user.id;
+
+      // Calculate date filter based on timeframe
+      let dateFilter: Date | null = null;
+      if (timeframe === 'week') {
+        dateFilter = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      } else if (timeframe === 'month') {
+        dateFilter = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      }
+
+      // Get posts with AI analysis for the user within timeframe
+      const posts = await ctx.db.post.findMany({
+        where: {
+          userId,
+          createdAt: dateFilter ? {
+            gte: dateFilter,
+          } : undefined,
+          aiAnalysis: {
+            isNot: null,
+          },
+        },
+        include: {
+          aiAnalysis: {
+            select: {
+              sentiment: true,
+              topics: true,
+              suggestions: true,
+              detectedEntities: true,
+            },
+          },
+          _count: {
+            select: {
+              reactions: true,
+              comments: true,
+              savedBy: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+
+      // Fetch previous time period for comparison
+      let previousTimeframeStart: Date | null = null;
+      let previousTimeframeEnd: Date | null = null;
+      if (timeframe === 'week') {
+        previousTimeframeStart = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+        previousTimeframeEnd = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      } else if (timeframe === 'month') {
+        previousTimeframeStart = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+        previousTimeframeEnd = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      }
+
+      // Get post count for previous time period for comparison
+      const previousPeriodPostCount = previousTimeframeStart && previousTimeframeEnd ? await ctx.db.post.count({
+        where: {
+          userId,
+          aiAnalysis: {
+            isNot: null,
+          },
+          createdAt: {
+            gte: previousTimeframeStart,
+            lt: previousTimeframeEnd,
+          },
+        },
+      }) : 0;
+
+      // Calculate sentiment statistics
+      const sentimentStats = {
+        positive: 0,
+        negative: 0,
+        neutral: 0,
+        mixed: 0,
+      };
+
+      // Calculate engagement predictions
+      const engagementStats = {
+        high: 0,
+        medium: 0,
+        low: 0,
+        total: 0,
+      };
+
+      // Keep track of topics for aggregation
+      const topicsMap = new Map<string, number>();
+
+      // Parse topics and entities from each post
+      posts.forEach(post => {
+        // Count sentiments
+        const sentiment = post.aiAnalysis?.sentiment?.toLowerCase() || 'neutral';
+        if (sentiment === 'positive') sentimentStats.positive++;
+        else if (sentiment === 'negative') sentimentStats.negative++;
+        else if (sentiment === 'neutral') sentimentStats.neutral++;
+        else if (sentiment === 'mixed') sentimentStats.mixed++;
+
+        // Determine engagement (using reaction + comment count as proxy)
+        const engagement = post._count.reactions + post._count.comments;
+        if (engagement > 10) engagementStats.high++;
+        else if (engagement > 3) engagementStats.medium++;
+        else engagementStats.low++;
+        engagementStats.total += engagement;
+
+        // Extract topics
+        if (post.aiAnalysis?.topics) {
+          const topics = post.aiAnalysis.topics.split(',').map(t => t.trim());
+          topics.forEach(topic => {
+            if (topic) {
+              topicsMap.set(topic, (topicsMap.get(topic) || 0) + 1);
+            }
+          });
+        }
+      });
+
+      // Calculate change percentage from previous period
+      const changePercentage = previousPeriodPostCount > 0
+        ? Math.round(((posts.length - previousPeriodPostCount) / previousPeriodPostCount) * 100)
+        : null;
+
+      // Calculate average engagement score
+      const averageEngagementScore = posts.length > 0
+        ? Math.round((engagementStats.total / posts.length) * 100) / 100
+        : 0;
+
+      // Calculate change in engagement score
+      const previousPeriodPosts = previousTimeframeStart && previousTimeframeEnd ? await ctx.db.post.findMany({
+        where: {
+          userId,
+          createdAt: {
+            gte: previousTimeframeStart,
+            lt: previousTimeframeEnd,
+          },
+        },
+        include: {
+          _count: {
+            select: {
+              reactions: true,
+              comments: true,
+            },
+          },
+        },
+      }) : [];
+
+      const previousAvgEngagement = previousPeriodPosts.length > 0
+        ? previousPeriodPosts.reduce((acc, post) => acc + post._count.reactions + post._count.comments, 0) / previousPeriodPosts.length
+        : 0;
+
+      const engagementChange = previousAvgEngagement > 0
+        ? ((averageEngagementScore - previousAvgEngagement) / previousAvgEngagement) * 100
+        : 0;
+
+      // Get top topics
+      const topTopics = Array.from(topicsMap.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([name, count]) => ({ name, count }));
+
+      // Get recent posts with analysis
+      const recentPosts = posts.slice(0, 5).map(post => {
+        // Extract topics from the comma-separated string
+        const topics = post.aiAnalysis?.topics
+          ? post.aiAnalysis.topics.split(',').map(t => t.trim())
+          : [];
+
+        // Determine engagement level
+        const engagement = post._count.reactions + post._count.comments;
+        let engagementLevel: 'low' | 'medium' | 'high' = 'low';
+        if (engagement > 10) engagementLevel = 'high';
+        else if (engagement > 3) engagementLevel = 'medium';
+
+        return {
+          id: post.id,
+          content: post.content,
+          createdAt: post.createdAt,
+          sentiment: post.aiAnalysis?.sentiment?.toLowerCase() || 'neutral',
+          engagement: engagementLevel,
+          topics,
+          shares: post._count.savedBy || 0,
+          user: {
+            id: userId,
+            name: ctx.session.user.name || 'User',
+            image: ctx.session.user.image,
+          },
+        };
+      });
+
+      return {
+        totalAnalyzed: posts.length,
+        changePercentage,
+        sentimentStats,
+        engagementStats,
+        averageEngagementScore,
+        engagementChange,
+        topTopics,
+        recentPosts,
+      };
+    }),
+
+  getPostAnalysis: protectedProcedure
+    .input(
+      z.object({
+        postId: z.string(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { postId } = input;
+
+      // Get post with AI analysis
+      const post = await ctx.db.post.findUnique({
+        where: {
+          id: postId,
+        },
+        include: {
+          aiAnalysis: true,
+        },
+      });
+
+      if (!post || !post.aiAnalysis) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Post analysis not found',
+        });
+      }
+
+      // Convert AI analysis to ContentAnalysis format
+      try {
+        // Import ContentAnalysis type
+        const { ContentAnalysis } = await import('@/lib/gemini');
+
+        // Parse entities from stored JSON string
+        const entities = post.aiAnalysis.detectedEntities
+          ? JSON.parse(post.aiAnalysis.detectedEntities)
+          : [];
+
+        // Parse topics from stored comma-separated string
+        const topics = post.aiAnalysis.topics
+          ? post.aiAnalysis.topics.split(',').map((t: string) => t.trim())
+          : [];
+
+        // Parse suggestions from stored newline-separated string
+        const suggestions = post.aiAnalysis.suggestions
+          ? post.aiAnalysis.suggestions.split('\n').filter(Boolean)
+          : [];
+
+        // Create a ContentAnalysis object
+        const analysis: ContentAnalysis = {
+          sentiment: (post.aiAnalysis.sentiment as any) || 'neutral',
+          topics,
+          entities,
+          tone: 'neutral', // Default value since we don't store this
+          suggestions,
+          engagementPrediction: 'medium', // Default value since we don't store this
+          reasonForEngagementPrediction: 'Based on past content performance',
+        };
+
+        return analysis;
+      } catch (error) {
+        console.error('Error parsing post analysis:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to parse post analysis',
+        });
+      }
     }),
 
   addComment: protectedProcedure

@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { CreateReelButton } from '../components/reels';
 
-// Dynamic import of ReelFeed with a loading fallback
-const ReelFeed = dynamic(() => import('../components/reels/ReelFeed'), {
+// Dynamic import of RecommendedReelFeed with a loading fallback
+const RecommendedReelFeed = dynamic(() => import('../components/reels/RecommendedReelFeed'), {
   loading: () => (
     <div className="flex items-center justify-center h-screen bg-black">
       <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
@@ -80,7 +80,7 @@ export default function ReelsPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
           </div>
         }>
-          <ReelFeed />
+          <RecommendedReelFeed />
         </Suspense>
       </ReelFeedErrorBoundary>
       <CreateReelButton variant="fixed" />

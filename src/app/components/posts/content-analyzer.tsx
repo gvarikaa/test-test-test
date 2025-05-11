@@ -8,9 +8,10 @@ import { AlertTriangle, Check, ChevronDown, ChevronUp, Loader2, ThumbsUp, Thumbs
 interface ContentAnalyzerProps {
   content: string;
   onSuggestionApply?: (suggestion: string) => void;
+  onAnalysisComplete?: (analysis: ContentAnalysis, tokenUsage: number) => void;
 }
 
-export function ContentAnalyzer({ content, onSuggestionApply }: ContentAnalyzerProps) {
+export function ContentAnalyzer({ content, onSuggestionApply, onAnalysisComplete }: ContentAnalyzerProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [analysis, setAnalysis] = useState<ContentAnalysis | null>(null);
@@ -23,6 +24,10 @@ export function ContentAnalyzer({ content, onSuggestionApply }: ContentAnalyzerP
       setAnalysis(data.analysis);
       setTokenUsage(data.tokenUsage);
       setIsAnalyzing(false);
+      // Notify parent component about the analysis result
+      if (onAnalysisComplete) {
+        onAnalysisComplete(data.analysis, data.tokenUsage);
+      }
     },
     onError: (err) => {
       setError(err.message || "Failed to analyze content");

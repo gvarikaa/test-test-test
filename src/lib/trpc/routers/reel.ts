@@ -2,8 +2,197 @@ import { z } from 'zod';
 import { protectedProcedure, publicProcedure, router } from '../server';
 import { TRPCError } from '@trpc/server';
 import { EffectType, SharePlatform } from '@prisma/client';
+import { getReelRecommendations, logReelView, markRecommendationsViewed } from '@/lib/reel-recommendation';
 
 export const reelRouter = router({
+  getRecommendedReels: protectedProcedure
+    .input(
+      z.object({
+        limit: z.number().min(1).max(50).default(10),
+        cursor: z.string().optional(),
+        includeFollowing: z.boolean().optional(),
+        includeTopics: z.boolean().optional(),
+        includeTrending: z.boolean().optional(),
+        includeSimilarContent: z.boolean().optional(),
+        includeExplore: z.boolean().optional(),
+        diversityFactor: z.number().min(0).max(1).optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const {
+        limit,
+        includeFollowing,
+        includeTopics,
+        includeTrending,
+        includeSimilarContent,
+        includeExplore,
+        diversityFactor
+      } = input;
+      const { session } = ctx;
+
+      if (!session?.user) {
+        throw new TRPCError({
+          code: 'UNAUTHORIZED',
+          message: 'You must be logged in to get recommendations',
+        });
+      }
+
+      try {
+        // Get recommendations
+        const recommendations = await getReelRecommendations(session.user.id, {
+          limit,
+          includeFollowing,
+          includeTopics,
+          includeTrending,
+          includeSimilarContent,
+          includeExplore,
+          diversityFactor,
+        });
+
+        if (recommendations.length === 0) {
+          return {
+            reels: [],
+            nextCursor: undefined,
+          };
+        }
+
+        // Fetch the actual reel data
+        const reelIds = recommendations.map(rec => rec.reelId);
+        const reels = await ctx.db.reel.findMany({
+          where: {
+            id: { in: reelIds },
+            isPublished: true,
+          },
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                image: true,
+              },
+            },
+            media: true,
+            audio: true,
+            _count: {
+              select: {
+                likes: true,
+                comments: true,
+                shares: true,
+              },
+            },
+          },
+        });
+
+        // Check if items have been liked by current user
+        const likes = await ctx.db.reelLike.findMany({
+          where: {
+            reelId: { in: reelIds },
+            userId: session.user.id,
+          },
+        });
+
+        const likedReelIds = new Set(likes.map(like => like.reelId));
+
+        // Mark recommendations as viewed
+        await markRecommendationsViewed(session.user.id, reelIds);
+
+        // Map reels to include recommendation data and like status
+        const reelsWithMetadata = reels.map(reel => {
+          const recommendation = recommendations.find(r => r.reelId === reel.id);
+
+          return {
+            ...reel,
+            likeCount: reel._count.likes,
+            commentCount: reel._count.comments,
+            shareCount: reel._count.shares,
+            isLikedByUser: likedReelIds.has(reel.id),
+            recommendation: recommendation ? {
+              reason: recommendation.reason,
+              source: recommendation.source,
+            } : null,
+          };
+        });
+
+        // Sort by recommendation score to maintain order
+        const sortedReels = reelsWithMetadata.sort((a, b) => {
+          const scoreA = recommendations.find(r => r.reelId === a.id)?.score || 0;
+          const scoreB = recommendations.find(r => r.reelId === b.id)?.score || 0;
+          return scoreB - scoreA;
+        });
+
+        // Get last item for cursor
+        const lastItem = sortedReels[sortedReels.length - 1];
+        const recommendationForCursor = recommendations.find(r => r.reelId === lastItem?.id);
+
+        return {
+          reels: sortedReels,
+          nextCursor: recommendationForCursor?.reelId,
+        };
+      } catch (error) {
+        console.error('Error fetching reel recommendations:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to fetch reel recommendations',
+          cause: error,
+        });
+      }
+    }),
+
+  logReelViewed: protectedProcedure
+    .input(
+      z.object({
+        reelId: z.string(),
+        completionRate: z.number().min(0).max(1),
+        watchDuration: z.number().min(0),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { reelId, completionRate, watchDuration } = input;
+      const { session } = ctx;
+
+      if (!session?.user) {
+        throw new TRPCError({
+          code: 'UNAUTHORIZED',
+          message: 'You must be logged in to log views',
+        });
+      }
+
+      try {
+        // Log to ReelView
+        await ctx.db.reelView.create({
+          data: {
+            watchDuration,
+            completionRate,
+            reel: { connect: { id: reelId } },
+            user: { connect: { id: session.user.id } },
+          },
+        });
+
+        // Call recommendation log function
+        await logReelView(
+          session.user.id,
+          reelId,
+          completionRate,
+          watchDuration
+        );
+
+        // Update reel view count
+        await ctx.db.reel.update({
+          where: { id: reelId },
+          data: { viewCount: { increment: 1 } },
+        });
+
+        return { success: true };
+      } catch (error) {
+        console.error('Error logging reel view:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to log reel view',
+          cause: error,
+        });
+      }
+    }),
   getReels: publicProcedure
     .input(
       z.object({

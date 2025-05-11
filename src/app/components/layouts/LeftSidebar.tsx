@@ -197,6 +197,33 @@ export default function LeftSidebar() {
           <ul className="space-y-1">
             <li>
               <Link
+                href="/ai-analytics"
+                className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-hover-bg"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-card-secondary-bg">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-5">
+                    <path d="M18.375 2.25c-1.035 0-1.875.84-1.875 1.875v15.75c0 1.035.84 1.875 1.875 1.875h.75c1.035 0 1.875-.84 1.875-1.875V4.125c0-1.036-.84-1.875-1.875-1.875h-.75zM9.75 8.625c0-1.036.84-1.875 1.875-1.875h.75c1.036 0 1.875.84 1.875 1.875v11.25c0 1.035-.84 1.875-1.875 1.875h-.75a1.875 1.875 0 01-1.875-1.875V8.625zM3 13.125c0-1.036.84-1.875 1.875-1.875h.75c1.036 0 1.875.84 1.875 1.875v6.75c0 1.035-.84 1.875-1.875 1.875h-.75A1.875 1.875 0 013 19.875v-6.75z" />
+                  </svg>
+                </span>
+                <span>AI Analysis Dashboard</span>
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/admin/seo"
+                className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-hover-bg"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-card-secondary-bg">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-5">
+                    <path fillRule="evenodd" d="M3.75 4.5a.75.75 0 01.75-.75h.75c8.284 0 15 6.716 15 15v.75a.75.75 0 01-.75.75h-.75a.75.75 0 01-.75-.75v-.75C18 11.708 12.292 6 5.25 6H4.5a.75.75 0 01-.75-.75V4.5zm0 6.75a.75.75 0 01.75-.75h.75a8.25 8.25 0 018.25 8.25v.75a.75.75 0 01-.75.75H12a.75.75 0 01-.75-.75v-.75c0-3.722-3.025-6.75-6.75-6.75H4.5a.75.75 0 01-.75-.75v-.75z" clipRule="evenodd" />
+                    <path d="M3 14.25a.75.75 0 01.75-.75h.75a4.5 4.5 0 014.5 4.5v.75a.75.75 0 01-.75.75H6.75a.75.75 0 01-.75-.75v-.75c0-1.24-1.01-2.25-2.25-2.25H3.75a.75.75 0 01-.75-.75v-.75z" />
+                  </svg>
+                </span>
+                <span>SEO Management</span>
+              </Link>
+            </li>
+            <li>
+              <Link
                 href="/test-trpc"
                 className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-hover-bg"
               >

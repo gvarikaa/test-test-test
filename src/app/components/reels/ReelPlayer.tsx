@@ -143,6 +143,7 @@ const ReelPlayer: React.FC<ReelPlayerProps> = ({
         
         {videoUrl && (
           <video
+            id={`reel-video-${reel.id}`}
             ref={videoRef}
             className="w-full h-full object-cover"
             src={videoUrl}
