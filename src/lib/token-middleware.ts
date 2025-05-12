@@ -1,8 +1,6 @@
 import { TRPCError } from '@trpc/server';
-import { PrismaClient } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
-
-const prisma = new PrismaClient();
+import { db } from '@/lib/db';
 
 /**
  * Middleware to check if a user has enough tokens for an AI operation
@@ -21,7 +19,7 @@ export async function checkUserTokens(
   }
   
   // Get token limit
-  const tokenLimit = await prisma.aiTokenLimit.findUnique({
+  const tokenLimit = await db.aiTokenLimit.findUnique({
     where: { userId },
   });
   
@@ -30,7 +28,7 @@ export async function checkUserTokens(
     const now = new Date();
     const resetAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // Reset in 24 hours
     
-    const newTokenLimit = await prisma.aiTokenLimit.create({
+    const newTokenLimit = await db.aiTokenLimit.create({
       data: {
         userId,
         tier: 'FREE',
@@ -56,7 +54,7 @@ export async function checkUserTokens(
   // Check if token usage should be reset
   if (tokenLimit.resetAt < new Date()) {
     // Reset daily token usage
-    await prisma.aiTokenLimit.update({
+    await db.aiTokenLimit.update({
       where: { userId },
       data: {
         usage: 0,
@@ -64,9 +62,9 @@ export async function checkUserTokens(
         lastActivity: new Date(),
       },
     });
-    
+
     // Get updated token limit
-    const updatedTokenLimit = await prisma.aiTokenLimit.findUnique({
+    const updatedTokenLimit = await db.aiTokenLimit.findUnique({
       where: { userId },
     });
     
@@ -99,16 +97,16 @@ export async function recordUserTokenUsage(
 ) {
   try {
     // Get token limit
-    const tokenLimit = await prisma.aiTokenLimit.findUnique({
+    const tokenLimit = await db.aiTokenLimit.findUnique({
       where: { userId },
     });
-    
+
     if (!tokenLimit) {
       throw new Error('Token limit record not found');
     }
-    
+
     // Update token usage
-    await prisma.aiTokenLimit.update({
+    await db.aiTokenLimit.update({
       where: { userId },
       data: {
         usage: tokenLimit.usage + tokensUsed,
@@ -116,9 +114,9 @@ export async function recordUserTokenUsage(
         lastActivity: new Date(),
       },
     });
-    
+
     // Record token usage stats
-    await prisma.aiTokenUsageStat.create({
+    await db.aiTokenUsageStat.create({
       data: {
         tokenLimitId: tokenLimit.id,
         operationType,
@@ -157,6 +155,8 @@ export async function recordUserTokenUsage(
  * @param operationCost The cost of the operation in tokens
  * @param skipCheck Whether to skip the token check (for certain operations)
  */
+import { getToken } from 'next-auth/jwt';
+
 export async function tokenMiddleware(
   req: NextRequest,
   operationCost: number,
@@ -166,21 +166,31 @@ export async function tokenMiddleware(
   if (operationCost === 0 || skipCheck) {
     return NextResponse.next();
   }
-  
+
   try {
-    // Get user ID from session
-    const session = req.cookies.get('next-auth.session-token')?.value;
-    
-    if (!session) {
+    // Get token from next-auth
+    const token = await getToken({
+      req,
+      secret: process.env.NEXTAUTH_SECRET,
+      secureCookie: process.env.NODE_ENV === "production"
+    });
+
+    if (!token) {
       return new NextResponse(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({ error: 'Unauthorized', code: 'UNAUTHORIZED' }),
         { status: 401 }
       );
     }
-    
-    // TODO: Extract user ID from session - this is a placeholder
-    // In a real implementation, you'd decode the session token
-    const userId = 'user_id_from_session';
+
+    // Extract user ID from token (sub field is standard in JWT tokens)
+    const userId = token.sub || token.id as string;
+
+    if (!userId) {
+      return new NextResponse(
+        JSON.stringify({ error: 'Invalid authentication token', code: 'INVALID_TOKEN' }),
+        { status: 401 }
+      );
+    }
     
     // Check if user has enough tokens
     const { hasTokens } = await checkUserTokens(userId, operationCost);

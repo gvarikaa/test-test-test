@@ -101,28 +101,39 @@ export interface TierUpgradeOptions {
 }
 
 // Token usage stats for visualization
+// Base interface for day-based data
+interface DayData {
+  date: string;
+  tokens: number;
+}
+
+// Enhanced day data with additional metrics
+interface EnhancedDayData extends DayData {
+  calls?: number;
+  avgResponseTime?: number;
+  successRate?: number;
+}
+
+// User activity data
+interface UserActivityData {
+  id: string;
+  tokens: number;
+  calls?: number;
+}
+
+// Base token usage stats
 export interface TokenUsageStats {
   totalTokens: number;
   byModel: Record<string, number>;
   byFeature: Record<string, number>;
   byEndpoint: Record<string, number>;
   byOperationType: Record<string, number>;
-  byDay: {
-    date: string;
-    tokens: number;
-    calls?: number;
-    avgResponseTime?: number;
-    successRate?: number;
-  }[];
+  byDay: EnhancedDayData[];
   avgResponseTime?: number;
   successRate?: number;
   activeUsers?: number;
-  userActivity?: {
-    id: string;
-    tokens: number;
-    calls?: number;
-  }[];
-  dailyUsage?: Array<{ date: string; tokens: number }>;
+  userActivity?: UserActivityData[];
+  dailyUsage?: DayData[];
   weeklyUsage?: Array<{ week: string; tokens: number }>;
   monthlyUsage?: Array<{ month: string; tokens: number }>;
   operationBreakdown?: Record<string, number>;
@@ -160,7 +171,9 @@ export const initializeTokenLimit = async (userId: string, tier: TokenTier = Tok
     });
   } catch (error) {
     console.error('Error initializing token limit:', error);
-    throw error;
+    // Add structured error handling
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error initializing token limit';
+    throw new Error(`Token limit initialization failed: ${errorMessage}`);
   }
 };
 
@@ -179,6 +192,9 @@ export const checkTokenAvailability = async (userId: string, operation: string, 
     return tokenLimit.usage + operationCost <= tokenLimit.limit;
   } catch (error) {
     console.error('Error checking token availability:', error);
+    // Log more context about the error
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`Failed to check tokens for user ${userId} and operation ${operation}: ${errorMessage}`);
     return false;
   }
 };
@@ -233,12 +249,12 @@ export const resetTokenUsage = async (userId: string): Promise<void> => {
   try {
     // Get current token limit
     const tokenLimit = await getOrCreateTokenLimit(userId);
-    
+
     // Calculate carrying over tokens if applicable (10% for paying tiers)
     const carryOverTokens = tokenLimit.tier !== TokenTier.FREE
       ? Math.floor((tokenLimit.limit - tokenLimit.usage) * 0.1)
       : 0;
-    
+
     // Update token limit
     await db.aITokenLimit.update({
       where: { userId },
@@ -248,9 +264,117 @@ export const resetTokenUsage = async (userId: string): Promise<void> => {
         resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Reset in 24 hours
       },
     });
+
+    // Log this reset for analytics
+    try {
+      await db.aiTokenUsageStat.create({
+        data: {
+          tokenLimitId: tokenLimit.id,
+          operationType: 'TOKEN_RESET',
+          tokensUsed: -tokenLimit.usage, // Negative to indicate token reset
+          model: 'system',
+          endpoint: 'token-management.resetTokenUsage',
+          featureArea: 'system',
+          metadata: {
+            previousUsage: tokenLimit.usage,
+            carryOver: carryOverTokens,
+            tier: tokenLimit.tier
+          }
+        }
+      });
+    } catch (statsError) {
+      // Don't fail the reset operation if just the stats logging fails
+      console.warn('Failed to log token reset statistics:', statsError);
+    }
   } catch (error) {
     console.error('Error resetting token usage:', error);
     throw error;
+  }
+};
+
+/**
+ * Clean up expired bonus tokens for all users
+ * This should be run on a schedule (e.g., daily or weekly)
+ */
+export const cleanupExpiredBonusTokens = async (): Promise<{
+  cleaned: number;
+  errors: number;
+  affectedUsers: string[];
+}> => {
+  const now = new Date();
+  const affectedUsers: string[] = [];
+  let cleaned = 0;
+  let errors = 0;
+
+  try {
+    // First, find all users with bonus token history records that have expired
+    // Note: This assumes we have a bonusTokenHistory table, if not this will throw and be caught
+    const expiredTokens = await db.bonusTokenHistory.findMany({
+      where: {
+        status: 'ACTIVE',
+        expiresAt: {
+          lt: now
+        }
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            tokenLimit: true
+          }
+        }
+      }
+    });
+
+    // Process each expired bonus token record
+    for (const record of expiredTokens) {
+      try {
+        const userId = record.userId;
+        affectedUsers.push(userId);
+
+        // Get current token limit
+        const tokenLimit = await db.aITokenLimit.findUnique({
+          where: { userId }
+        });
+
+        if (!tokenLimit) {
+          console.warn(`Token limit not found for user ${userId} when cleaning expired bonus tokens`);
+          errors++;
+          continue;
+        }
+
+        // Update the token limit - deduct expired bonus tokens
+        await db.aITokenLimit.update({
+          where: { userId },
+          data: {
+            bonusTokens: Math.max(0, tokenLimit.bonusTokens - record.amount),
+            limit: Math.max(
+              TOKEN_TIER_LIMITS[tokenLimit.tier as TokenTier],
+              tokenLimit.limit - record.amount
+            ),
+          }
+        });
+
+        // Mark the bonus token record as expired
+        await db.bonusTokenHistory.update({
+          where: { id: record.id },
+          data: {
+            status: 'EXPIRED'
+          }
+        });
+
+        cleaned++;
+      } catch (userError) {
+        console.error(`Error cleaning expired bonus tokens for user ${record.userId}:`, userError);
+        errors++;
+      }
+    }
+
+    return { cleaned, errors, affectedUsers };
+  } catch (error) {
+    // Return with whatever we managed to clean up so far
+    console.error('Error in bulk bonus token cleanup:', error);
+    return { cleaned, errors, affectedUsers };
   }
 };
 
@@ -303,8 +427,8 @@ export async function getTokenUsageStats(
   timeframe: 'day' | 'week' | 'month' | 'year' = 'month'
 ): Promise<TokenUsageStats> {
   try {
-    // Get database instance
-    const db = await getDb();
+    // Use imported database instance that was imported at the top of the file
+    // No need for getDb() function as we already have access to the db instance
 
     // Calculate the start date based on timeframe
     const now = new Date();
@@ -614,7 +738,7 @@ const calculatePredictedDepletion = (tokenLimit: any, usageStats: any[]): string
   
   // Calculate daily average usage
   const totalTokens = usageStats.reduce((sum, stat) => sum + stat.tokensUsed, 0);
-  const uniqueDays = new Set(usageStats.map(stat => stat.timestamp.toISOString().split('T')[0])).size;
+  const uniqueDays = new Set(usageStats.map(stat => stat.createdAt.toISOString().split('T')[0])).size;
   const dailyAverage = uniqueDays > 0 ? totalTokens / uniqueDays : totalTokens;
   
   if (dailyAverage <= 0) {
@@ -709,41 +833,129 @@ const generateSavingRecommendations = (tokenLimit: any, usageStats: any[]): stri
 
 /**
  * Estimate token count for prompt (approximation only)
- * Helper function
+ * Helper function with improved estimation logic for different languages
  */
 export const estimateTokenCount = (text: string): number => {
-  // Simple approximation: 4 characters ≈ 1 token
-  // This is just an estimation and not accurate for all languages
+  if (!text) return 0;
+
+  // Check if text is primarily non-Latin (e.g., Georgian, Chinese, Japanese, Korean, etc.)
+  // These languages typically use more tokens per character
+  const nonLatinRegex = /[^\u0000-\u007F]/g;
+  const nonLatinCharCount = (text.match(nonLatinRegex) || []).length;
+  const nonLatinRatio = nonLatinCharCount / text.length;
+
+  if (nonLatinRatio > 0.5) {
+    // For primarily non-Latin text, estimate 2-3 characters per token
+    return Math.ceil(text.length / 2.5);
+  }
+
+  // Check for code-like content (tends to be more efficient in tokens)
+  const codeIndicators = ['{', '}', '()', ';', '===', '=>', 'function', 'class', 'import ', 'export '];
+  const hasCodeIndicators = codeIndicators.some(indicator => text.includes(indicator));
+
+  if (hasCodeIndicators) {
+    // Code tends to compress better into tokens
+    return Math.ceil(text.length / 5);
+  }
+
+  // Default approximation for Latin-based text: ~4 characters ≈ 1 token
   return Math.ceil(text.length / 4);
 };
 
 /**
- * Grant bonus tokens to a user
+ * Grant bonus tokens to a user with enhanced tracking and validation
  */
-export const grantBonusTokens = async (userId: string, amount: number, reason?: string): Promise<void> => {
+export const grantBonusTokens = async (
+  userId: string,
+  amount: number,
+  reason?: string,
+  expiration?: Date
+): Promise<boolean> => {
+  // Validate the input
+  if (amount <= 0) {
+    console.error('Cannot grant non-positive token amount:', amount);
+    return false;
+  }
+
+  if (!userId) {
+    console.error('Cannot grant tokens without a valid user ID');
+    return false;
+  }
+
   try {
     // Get current token limit
     const tokenLimit = await getOrCreateTokenLimit(userId);
-    
+
+    // Set default expiration date if not provided (30 days from now)
+    const tokenExpiration = expiration || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
     // Update token limit
     await db.aITokenLimit.update({
       where: { userId },
       data: {
         bonusTokens: tokenLimit.bonusTokens + amount,
         limit: tokenLimit.limit + amount,
+        // Log the token grant as a transaction
         tokenUsageStats: {
           create: {
             operationType: 'BONUS_TOKENS',
             tokensUsed: -amount, // Negative to indicate tokens added
             model: 'system',
             featureArea: 'rewards',
-            metadata: { reason },
+            metadata: {
+              reason,
+              expiresAt: tokenExpiration.toISOString(),
+              previousBalance: tokenLimit.bonusTokens,
+              newBalance: tokenLimit.bonusTokens + amount
+            },
           }
         }
       },
     });
+
+    // Attempt to record bonus token history if the schema supports it
+    try {
+      await db.bonusTokenHistory.create({
+        data: {
+          userId,
+          amount,
+          reason: reason || 'System bonus',
+          grantedAt: new Date(),
+          expiresAt: tokenExpiration,
+          status: 'ACTIVE',
+        }
+      });
+    } catch (historyError) {
+      // Ignore if schema doesn't support this table yet
+      console.warn('Could not record bonus token history, table may not exist:', historyError);
+    }
+
+    // Try to notify user about bonus tokens if notifications table exists
+    try {
+      await db.notification.create({
+        data: {
+          userId,
+          type: 'TOKEN_BONUS',
+          title: 'Bonus Tokens Received',
+          content: `You received ${amount} bonus tokens. ${reason ? `Reason: ${reason}` : ''}`,
+          read: false,
+          data: {
+            amount,
+            reason,
+            expiresAt: tokenExpiration.toISOString()
+          }
+        }
+      });
+    } catch (notifyError) {
+      // Don't fail if notification table doesn't exist
+      console.warn('Failed to create notification for bonus tokens:', notifyError);
+    }
+
+    return true;
   } catch (error) {
     console.error('Error granting bonus tokens:', error);
-    throw error;
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`Failed to grant ${amount} bonus tokens to user ${userId}: ${errorMessage}`);
+    return false;
   }
 };

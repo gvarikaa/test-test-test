@@ -3,6 +3,51 @@ import { router, publicProcedure, protectedProcedure } from '../server';
 import { TRPCError } from '@trpc/server';
 import { Visibility } from '@prisma/client';
 
+// Simple file-level memory cache for frequently accessed posts to improve performance
+type CacheEntry<T> = { data: T; expiresAt: number };
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
+const postCache = new Map<string, CacheEntry<any>>();
+
+// Helper to handle cache operations
+const cache = {
+  get: <T>(key: string): T | null => {
+    const entry = postCache.get(key);
+    if (!entry) return null;
+
+    // Check if entry has expired
+    if (entry.expiresAt < Date.now()) {
+      postCache.delete(key);
+      return null;
+    }
+
+    return entry.data as T;
+  },
+
+  set: <T>(key: string, data: T, ttl: number = CACHE_TTL): void => {
+    // Don't cache null or undefined values
+    if (data === null || data === undefined) return;
+
+    const expiresAt = Date.now() + ttl;
+    postCache.set(key, { data, expiresAt });
+
+    // Prevent cache from growing too large (max 1000 entries)
+    if (postCache.size > 1000) {
+      // Delete oldest entry (or expired entries)
+      const oldestKey = [...postCache.entries()]
+        .filter(([key, entry]) => entry.expiresAt < Date.now())
+        .sort(([keyA, a], [keyB, b]) => a.expiresAt - b.expiresAt)[0]?.[0];
+
+      if (oldestKey) {
+        postCache.delete(oldestKey);
+      }
+    }
+  },
+
+  invalidate: (key: string): void => {
+    postCache.delete(key);
+  }
+};
+
 // მინიმალური ვერსია ყველა პრობლემური ველის გარეშე
 export const postRouter = router({
   getAll: publicProcedure
@@ -15,6 +60,9 @@ export const postRouter = router({
         hashtag: z.string().optional(),
         postIds: z.array(z.string()).optional(),
         includeComments: z.boolean().optional().default(false),
+        // New options for performance optimizations
+        minimalData: z.boolean().optional().default(false), // Return minimal data to improve performance
+        excludeMedia: z.boolean().optional().default(false), // Don't include media to improve performance
       }).optional()
     )
     .query(async ({ ctx, input }) => {
@@ -61,34 +109,56 @@ export const postRouter = router({
         // სტანდარტული ძებნა
         console.log("Running standard search with user ID:", userId);
 
-        // მინიმალური ფილტრებით მოვძებნოთ პოსტები
+        // მინიმალური ფილტრებით მოვძებნოთ პოსტები, მაგრამ დავამატოთ მოქნილი ფილტრაცია
+        // Define dynamic include based on optimization options
+        const includeOptions = {
+          user: {
+            select: input?.minimalData ? {
+              id: true,
+              name: true,
+              image: true,
+            } : {
+              id: true,
+              name: true,
+              username: true,
+              image: true,
+            },
+          },
+          // Only include media if not excluded
+          ...(!input?.excludeMedia ? { media: true } : {}),
+          // Count is lightweight so include it by default
+          _count: {
+            select: {
+              reactions: true,
+              comments: true,
+              ...(input?.includeComments ? { comments: true } : {}),
+            },
+          },
+        };
+
+        // Define dynamic where conditions
+        const whereConditions = {
+          OR: [
+            // რეალური, გამოქვეყნებული პოსტები
+            { published: true },
+            // სატესტო მონაცემებისთვის დამატებითი პირობები
+            { content: { not: null, not: "" } },
+            // პოსტები მედიით (if we're not excluding media)
+            ...(!input?.excludeMedia ? [{ media: { some: {} } }] : []),
+          ],
+          // Add type filter if specified
+          ...(input?.type ? { type: input.type } : {}),
+        };
+
+        // Perform query with optimized options
         const posts = await ctx.db.post.findMany({
           take: limit + 1,
           cursor: cursor ? { id: cursor } : undefined,
-          where: {
-            // შეიძლება სატესტო მონაცემები არ არის published=true
-            // published: true,
-          },
+          where: whereConditions,
           orderBy: {
             createdAt: 'desc',
           },
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                username: true,
-                image: true,
-              },
-            },
-            media: true,
-            _count: {
-              select: {
-                reactions: true,
-                comments: true,
-              },
-            },
-          },
+          include: includeOptions,
         });
 
         let nextCursor: typeof cursor = undefined;
@@ -126,34 +196,56 @@ export const postRouter = router({
 
         console.log("Running personalized feed with user ID:", userId);
 
-        // მარტივად გამოვიტანოთ ბოლო პოსტები, მინიმალური ფილტრებით
+        // Define dynamic include based on personalization needs - more data for personalized feeds
+        const includeOptions = {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              image: true,
+              ...(userId ? { interests: true } : {}), // Include interests if we have a userId
+            },
+          },
+          media: true, // Always include media for personalized feed
+          _count: {
+            select: {
+              reactions: true,
+              comments: true,
+            },
+          },
+          // No categories relation in Post model
+          // ...(userId ? { categories: { select: { id: true, name: true } } } : {}),
+        };
+
+        // Define dynamic where conditions - more targeted for personalized feeds
+        const whereConditions = {
+          OR: [
+            // რეალური, გამოქვეყნებული პოსტები
+            { published: true },
+            // სატესტო მონაცემებისთვის დამატებითი პირობები
+            { content: { not: null, not: "" } },
+            // პოსტები მედიით
+            { media: { some: {} } },
+          ],
+          // If user has interests, we could add more targeting later here
+        };
+
+        // For personalized feeds, optimize ordering with relevance scores
+        const orderByOptions = userId
+          ? [
+              // This is where we'd add custom scoring in a more advanced implementation
+              { createdAt: 'desc' }, // For now, still use recency
+            ]
+          : { createdAt: 'desc' };
+
+        // მარტივად გამოვიტანოთ ბოლო პოსტები, დამატებული ფილტრებით
         const posts = await ctx.db.post.findMany({
           take: limit + 1,
           cursor: cursor ? { id: cursor } : undefined,
-          where: {
-            // შეიძლება სატესტო მონაცემები არ არის published=true
-            // published: true,
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                username: true,
-                image: true,
-              },
-            },
-            media: true,
-            _count: {
-              select: {
-                reactions: true,
-                comments: true, 
-              },
-            },
-          },
+          where: whereConditions,
+          orderBy: orderByOptions,
+          include: includeOptions,
         });
 
         let nextCursor: typeof cursor = undefined;
@@ -179,6 +271,30 @@ export const postRouter = router({
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
       try {
+        const cacheKey = `post-${input.id}`;
+
+        // Check cache first
+        const cachedPost = cache.get(cacheKey);
+        if (cachedPost) {
+          console.log(`Cache hit for post ${input.id}`);
+
+          // Even for cached posts, try to record view analytics asynchronously
+          if (ctx.session?.user?.id) {
+            // Use a fire-and-forget pattern to avoid delaying the response
+            ctx.db.postView.create({
+              data: {
+                userId: ctx.session.user.id,
+                postId: input.id,
+                timestamp: new Date(),
+                source: 'post_page_cached',
+              },
+            }).catch(e => console.warn("Failed to record cached post view:", e));
+          }
+
+          return cachedPost;
+        }
+
+        // Get the post with additional error handling
         const post = await ctx.db.post.findUnique({
           where: { id: input.id },
           include: {
@@ -191,14 +307,39 @@ export const postRouter = router({
               },
             },
             media: true,
+            // No categories relation in Post model
+            // categories: {
+            //   select: {
+            //     id: true,
+            //     name: true,
+            //   }
+            // },
             _count: {
               select: {
                 reactions: true,
                 comments: true,
+                views: true,
               },
             },
           },
         });
+
+        // Add analytics event for post view
+        try {
+          if (post && ctx.session?.user?.id) {
+            await ctx.db.postView.create({
+              data: {
+                userId: ctx.session.user.id,
+                postId: post.id,
+                timestamp: new Date(),
+                source: 'post_page',
+              },
+            });
+          }
+        } catch (analyticError) {
+          // Don't fail the request if analytics fails
+          console.error("Failed to record post view analytics:", analyticError);
+        }
 
         if (!post) {
           throw new TRPCError({
@@ -206,6 +347,9 @@ export const postRouter = router({
             message: 'Post not found',
           });
         }
+
+        // Cache the post for future requests
+        cache.set(cacheKey, post);
 
         return post;
       } catch (error) {

@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { AuthProvider } from "@/providers/auth-provider";
-import { ThemeProvider } from "@/providers/theme-provider";
-import { TRPCProvider } from "@/providers/trpc-provider";
+import { LayoutWrapper } from "@/components/layout-wrapper";
 
 export const metadata: Metadata = {
   title: "DapDip - Social Network",
@@ -25,24 +23,9 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
       </head>
       <body className="antialiased bg-dark-bg text-text-primary">
-        <AuthProvider>
-          <TRPCProvider>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="dark"
-              enableSystem
-              disableTransitionOnChange
-            >
-              <script dangerouslySetInnerHTML={{
-                __html: `
-                  // Force dark mode
-                  document.documentElement.classList.add('dark');
-                `
-              }} />
-              {children}
-            </ThemeProvider>
-          </TRPCProvider>
-        </AuthProvider>
+        <LayoutWrapper>
+          {children}
+        </LayoutWrapper>
       </body>
     </html>
   );

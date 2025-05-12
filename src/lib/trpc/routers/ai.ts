@@ -69,7 +69,211 @@ const TOKEN_COSTS = {
   WORKOUT_PLAN_GENERATION: 150,
 };
 
+// Add procedures for post analysis and reality check
 export const aiRouter = router({
+  // Add token availability check procedure
+  checkTokenAvailability: protectedProcedure
+    .input(z.object({
+      operationType: z.string(),
+      variation: z.string().optional().default('standard')
+    }))
+    .query(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const hasTokens = await checkTokenAvailability(userId, input.operationType, input.variation);
+      return { hasTokens };
+    }),
+
+  // Add post analysis procedure
+  analyzePost: protectedProcedure
+    .input(z.object({
+      id: z.string()
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+
+      // Check if user has enough tokens
+      const hasTokens = await checkTokenAvailability(userId, 'CONTENT_ANALYSIS', 'detailed');
+      if (!hasTokens) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Not enough tokens for this operation'
+        });
+      }
+
+      try {
+        // Get the post from database
+        const post = await ctx.db.post.findUnique({
+          where: { id: input.id },
+          include: {
+            user: true,
+            media: true,
+            _count: {
+              select: {
+                reactions: true,
+                comments: true
+              }
+            }
+          }
+        });
+
+        if (!post) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Post not found'
+          });
+        }
+
+        // Generate analytics data
+        const engagementStats = {
+          totalReactions: post._count.reactions || 0,
+          totalComments: post._count.comments || 0,
+          totalSaves: Math.floor(Math.random() * 10), // Mock data
+          engagementScore: (((post._count.reactions || 0) + (post._count.comments || 0)) / 10).toFixed(1)
+        };
+
+        // Perform AI analysis
+        const startTime = Date.now();
+        const aiAnalysis = await analyzeContent(post.content || '', GeminiModel.PRO_LATEST, 'detailed');
+        const responseTime = Date.now() - startTime;
+
+        // Record token usage
+        await recordTokenUsage({
+          userId,
+          operationType: 'CONTENT_ANALYSIS',
+          tokensUsed: TOKEN_COSTS.CONTENT_ANALYSIS.detailed,
+          model: GeminiModel.PRO_LATEST,
+          endpoint: 'aiRouter.analyzePost',
+          featureArea: 'post-analysis',
+          responseTime,
+          success: true,
+          metadata: {
+            postId: post.id
+          }
+        });
+
+        // Return the analytics
+        return {
+          success: true,
+          postId: post.id,
+          publishedAt: post.createdAt.toLocaleString(),
+          visibility: post.visibility || 'public',
+          wordCount: post.content ? post.content.split(/\s+/).length : 0,
+          characterCount: post.content ? post.content.length : 0,
+          mediaCount: post.media.length,
+          engagementStats,
+          aiAnalysis
+        };
+      } catch (error) {
+        console.error('Error analyzing post:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error instanceof Error ? error.message : 'Failed to analyze post'
+        });
+      }
+    }),
+
+  // Add reality/fact check procedure
+  factCheckPost: protectedProcedure
+    .input(z.object({
+      id: z.string()
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+
+      // Check if user has enough tokens
+      const hasTokens = await checkTokenAvailability(userId, 'CONTENT_ANALYSIS', 'detailed');
+      if (!hasTokens) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Not enough tokens for this operation'
+        });
+      }
+
+      try {
+        // Get the post from database
+        const post = await ctx.db.post.findUnique({
+          where: { id: input.id },
+          include: {
+            user: true,
+            media: true
+          }
+        });
+
+        if (!post) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Post not found'
+          });
+        }
+
+        // Use Gemini to perform fact-checking
+        const gemini = getModelInstance(GeminiModel.PRO_1_5, SafetyLevel.STANDARD, {
+          temperature: 0.2,
+          maxOutputTokens: 2048
+        });
+
+        const startTime = Date.now();
+
+        // Construct prompt for fact checking
+        const prompt = `
+        Please perform a comprehensive fact-check and reality assessment on the following social media post.
+
+        POST CONTENT: "${post.content}"
+
+        Provide a structured analysis with the following:
+
+        1. FACTUAL CLAIMS: Identify all factual claims made in the post
+        2. VERIFICATION RESULTS: For each claim, indicate whether it is:
+           - ACCURATE: Claim is factually correct
+           - MISLEADING: Claim contains some truth but is presented in a misleading way
+           - UNVERIFIED: Claim cannot be verified with available information
+           - INACCURATE: Claim is factually incorrect
+        3. CONFIDENCE LEVEL: For each verification, provide a confidence level (Low/Medium/High)
+        4. CONTEXT: Provide missing context that would help understand the full picture
+        5. OVERALL ASSESSMENT: Give an overall assessment of the post's factual accuracy
+
+        Format your response as a JSON object with these sections.
+        `;
+
+        const result = await gemini.generateContent(prompt);
+        const response = result.response;
+        const responseText = response.text();
+
+        // Extract JSON from the response
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        const realityCheck = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+
+        const responseTime = Date.now() - startTime;
+
+        // Record token usage
+        await recordTokenUsage({
+          userId,
+          operationType: 'CONTENT_ANALYSIS',
+          tokensUsed: TOKEN_COSTS.CONTENT_ANALYSIS.detailed,
+          model: GeminiModel.PRO_1_5,
+          endpoint: 'aiRouter.factCheckPost',
+          featureArea: 'fact-checking',
+          responseTime,
+          success: true,
+          metadata: {
+            postId: post.id
+          }
+        });
+
+        // Return the reality check results
+        return {
+          success: true,
+          postId: post.id,
+          realityCheck
+        };
+      } catch (error) {
+        console.error('Error fact-checking post:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error instanceof Error ? error.message : 'Failed to perform fact check'
+        });
+      }
+    }),
   // Get the user's token limit and current usage
   getTokenLimit: protectedProcedure
     .query(async ({ ctx }) => {

@@ -1,10 +1,20 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { trpc } from '@/lib/trpc/client';
+import { useSession } from 'next-auth/react';
 import InlineRealityCheck from './InlineRealityCheck';
 import { RichTextContent } from '../posts/rich-text';
+import { sanitizeString, sanitizeUrl } from '@/lib/utils/sanitizers';
+import { loggers } from '@/lib/utils/debug';
+import { ErrorBoundary } from '@/components/error-boundary';
+
+interface Category {
+  id: string;
+  name: string;
+}
 
 interface PostProps {
   post: {
@@ -21,10 +31,33 @@ interface PostProps {
     likes: number;
     comments: number;
     shares: number;
+    visibility?: 'PUBLIC' | 'PRIVATE' | 'FRIENDS';
+    categories?: Category[] | string[];
+    aiAnalyzed?: boolean;
+    score?: number;
+    trending?: boolean;
   };
 }
 
+// Create a component-specific error boundary wrapper
+const PostErrorFallback = ({ error }: { error: Error }) => (
+  <div className="card mb-4 overflow-hidden relative p-4 bg-red-50/10 border border-red-300/20">
+    <div className="text-center py-6">
+      <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-100/20 mb-3">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 text-red-500">
+          <path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clipRule="evenodd" />
+        </svg>
+      </div>
+      <h4 className="font-medium text-red-500">Post Display Error</h4>
+      <p className="text-sm text-gray-400 mt-1">{error.message || 'Failed to display this post'}</p>
+    </div>
+  </div>
+);
+
+// Main post component
 export default function Post({ post }: PostProps) {
+  // Get session properly using next-auth's useSession
+  const { data: session } = useSession();
   const [liked, setLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likes);
   const [showComments, setShowComments] = useState(false);
@@ -32,11 +65,25 @@ export default function Post({ post }: PostProps) {
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [analytics, setAnalytics] = useState<any>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Reality check state
   const [showRealityCheck, setShowRealityCheck] = useState(false);
   const [realityCheckResult, setRealityCheckResult] = useState<any>(null);
   const [loadingRealityCheck, setLoadingRealityCheck] = useState(false);
+
+  // tRPC mutations
+  const analyzePostMutation = trpc.ai.analyzePost.useMutation();
+  const factCheckMutation = trpc.ai.factCheckPost.useMutation();
+
+  // Check if user has tokens for AI operations
+  const tokenCheck = trpc.ai.checkTokenAvailability.useQuery({
+    operationType: 'CONTENT_ANALYSIS',
+    variation: 'detailed'
+  }, {
+    staleTime: 1000 * 60 * 5, // Re-fetch after 5 minutes
+    refetchOnWindowFocus: false
+  });
   
   const toggleLike = () => {
     if (liked) {
@@ -58,20 +105,25 @@ export default function Post({ post }: PostProps) {
   const analyzePost = async () => {
     if (loadingAnalytics) return;
 
-    setLoadingAnalytics(true);
-    try {
-      const response = await fetch(`/api/test/analyze-post?id=${post.id}`);
-      const data = await response.json();
+    // Check if user has enough tokens
+    if (!tokenCheck.data?.hasTokens) {
+      setError("You don't have enough tokens for this operation. Please upgrade your plan.");
+      return;
+    }
 
-      if (data.success) {
+    setError(null);
+    setLoadingAnalytics(true);
+
+    try {
+      const data = await analyzePostMutation.mutateAsync({ id: post.id });
+
+      if (data) {
         setAnalytics(data);
         setShowAnalytics(true);
-      } else {
-        console.error("Error analyzing post:", data.error);
-        alert(`Error analyzing post: ${data.error}`);
       }
     } catch (error) {
-      console.error("Error fetching post analytics:", error);
+      console.error("Error analyzing post:", error);
+      setError(error instanceof Error ? error.message : "An error occurred while analyzing the post");
     } finally {
       setLoadingAnalytics(false);
     }
@@ -81,27 +133,65 @@ export default function Post({ post }: PostProps) {
   const checkReality = async () => {
     if (loadingRealityCheck) return;
 
-    setLoadingRealityCheck(true);
-    try {
-      const response = await fetch(`/api/test/fact-check?id=${post.id}`);
-      const data = await response.json();
+    // Check if user has enough tokens
+    if (!tokenCheck.data?.hasTokens) {
+      setError("You don't have enough tokens for this operation. Please upgrade your plan.");
+      return;
+    }
 
-      if (data.success) {
+    setError(null);
+    setLoadingRealityCheck(true);
+
+    try {
+      const data = await factCheckMutation.mutateAsync({ id: post.id });
+
+      if (data) {
         setRealityCheckResult(data);
         setShowRealityCheck(true);
-      } else {
-        console.error("Error fact-checking post:", data.error);
-        alert(`Error fact-checking post: ${data.error}`);
       }
     } catch (error) {
       console.error("Error during reality check:", error);
+      setError(error instanceof Error ? error.message : "An error occurred during fact-checking");
     } finally {
       setLoadingRealityCheck(false);
     }
   };
 
+  // Sanitize potentially unsafe data
+  const sanitizedPost = {
+    ...post,
+    content: sanitizeString(post.content),
+    user: {
+      ...post.user,
+      name: sanitizeString(post.user.name),
+      image: sanitizeUrl(post.user.image),
+    }
+  };
+
+  // Log post rendering for debugging
+  useEffect(() => {
+    loggers.ui.debug(`Rendering post: ${post.id}`);
+
+    // Track performance if needed
+    const startTime = performance.now();
+    return () => {
+      const renderTime = performance.now() - startTime;
+      if (renderTime > 100) { // Log slow renders
+        loggers.performance('Post render', startTime, { postId: post.id, renderTime });
+      }
+    };
+  }, [post.id]);
+
   return (
-    <article className="card mb-4 overflow-hidden relative">
+    <ErrorBoundary fallback={<PostErrorFallback error={new Error('Failed to render post')} />}>
+      <article className="card mb-4 overflow-hidden relative">
+      {/* Error message */}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 text-red-600 p-3 mb-3 rounded-md">
+          <p className="text-sm font-medium">{error}</p>
+        </div>
+      )}
+
       {/* Inline reality check */}
       {showRealityCheck && realityCheckResult && (
         <div className="mb-4">
@@ -119,7 +209,7 @@ export default function Post({ post }: PostProps) {
         <div className="flex items-center gap-2">
           <Link href={`/profile/${post.user.id}`}>
             <Image
-              src={post.user.image || 'https://ui-avatars.com/api/?name=Unknown+User&background=random&color=fff'}
+              src={sanitizedPost.user.image || 'https://ui-avatars.com/api/?name=Unknown+User&background=random&color=fff'}
               alt={post.user.name || 'Unknown User'}
               width={40}
               height={40}
@@ -127,11 +217,11 @@ export default function Post({ post }: PostProps) {
             />
           </Link>
           <div>
-            <Link 
+            <Link
               href={`/profile/${post.user.id}`}
               className="font-semibold text-text-primary hover:underline"
             >
-              {post.user.name || 'Unknown User'}
+              {sanitizedPost.user.name || 'Unknown User'}
             </Link>
             <div className="flex items-center gap-1 text-xs text-text-secondary">
               <span>{new Date(post.createdAt).toLocaleDateString('en-US', {
@@ -140,10 +230,35 @@ export default function Post({ post }: PostProps) {
                 year: 'numeric',
               })}</span>
               <span>•</span>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-3">
-                <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM6.75 12a.75.75 0 01.75-.75h9a.75.75 0 010 1.5h-9a.75.75 0 01-.75-.75z" clipRule="evenodd" />
-              </svg>
+
+              {/* Show the post visibility status with an icon */}
+              {post.visibility === 'PUBLIC' ? (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-3" title="Public">
+                  <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+                  <path fillRule="evenodd" d="M1.323 11.447C2.811 6.976 7.028 3.75 12.001 3.75c4.97 0 9.185 3.223 10.675 7.69.12.362.12.752 0 1.113-1.487 4.471-5.705 7.697-10.677 7.697-4.97 0-9.186-3.223-10.675-7.69a1.762 1.762 0 010-1.113zM17.25 12a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" clipRule="evenodd" />
+                </svg>
+              ) : post.visibility === 'PRIVATE' ? (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-3" title="Private">
+                  <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-3" title="Friends">
+                  <path fillRule="evenodd" d="M8.25 6.75a3.75 3.75 0 117.5 0 3.75 3.75 0 01-7.5 0zM15.75 9.75a3 3 0 116 0 3 3 0 01-6 0zM2.25 9.75a3 3 0 116 0 3 3 0 01-6 0zM6.31 15.117A6.745 6.745 0 0112 12a6.745 6.745 0 016.709 7.498.75.75 0 01-.372.568A12.696 12.696 0 0112 21.75c-2.305 0-4.47-.612-6.337-1.684a.75.75 0 01-.372-.568 6.787 6.787 0 011.019-4.38z" clipRule="evenodd" />
+                  <path d="M5.082 14.254a8.287 8.287 0 00-1.308 5.135 9.687 9.687 0 01-1.764-.44l-.115-.04a.563.563 0 01-.373-.487l-.01-.121a3.75 3.75 0 013.57-4.047zM20.226 19.389a8.287 8.287 0 00-1.308-5.135 3.75 3.75 0 013.57 4.047l-.01.121a.563.563 0 01-.373.486l-.115.04c-.567.2-1.156.349-1.764.441z" />
+                </svg>
+              )}
             </div>
+
+            {/* Display post categories/topics if available */}
+            {post.categories && post.categories.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {post.categories.map((category, idx) => (
+                  <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-primary-500/20 text-primary-700">
+                    #{category.name || category}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <button className="rounded-full p-2 hover:bg-hover-bg">
@@ -155,13 +270,37 @@ export default function Post({ post }: PostProps) {
 
       {/* კონტენტი */}
       <div className="px-3 pb-3">
+        {/* Show AI recommendation badge if post is AI-analyzed and has a high score */}
+        {post.aiAnalyzed && post.score && post.score > 0.7 && (
+          <div className="mb-2 flex items-center">
+            <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3">
+                <path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" />
+              </svg>
+              AI Recommended
+            </span>
+          </div>
+        )}
+
+        {/* Show trending badge if post is trending */}
+        {post.trending && (
+          <div className="mb-2 flex items-center">
+            <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3">
+                <path fillRule="evenodd" d="M15.22 6.268a.75.75 0 01.44.96l-1.39 4.173a.75.75 0 01-.96.44l-4.172-1.39a.75.75 0 01-.44-.96l1.39-4.173a.75.75 0 01.96-.44l4.172 1.39zM8.878 15.61l-1.39 4.172a.75.75 0 01-.96.44l-4.173-1.39a.75.75 0 01-.44-.96l1.39-4.172a.75.75 0 01.96-.44l4.173 1.39a.75.75 0 01.44.96zM7.875 7.343l-1.39-4.173a.75.75 0 01.96-.44l4.172 1.39a.75.75 0 01.44.96l-1.39 4.173a.75.75 0 01-.96.44l-4.172-1.39a.75.75 0 01-.44-.96zM19.753 14.613l-4.172 1.39a.75.75 0 01-.96-.44l-1.39-4.173a.75.75 0 01.44-.96l4.173-1.39a.75.75 0 01.96.44l1.39 4.173a.75.75 0 01-.44.96z" clipRule="evenodd" />
+              </svg>
+              Trending
+            </span>
+          </div>
+        )}
+
         <Link href={`/posts/${post.id}`} className="block mb-3 text-text-primary hover:underline">
           {post.formattedContent ? (
             <div className="rich-text-content whitespace-normal">
               <RichTextContent jsonContent={post.formattedContent} />
             </div>
           ) : (
-            <p className="whitespace-pre-line">{post.content}</p>
+            <p className="whitespace-pre-line">{sanitizedPost.content}</p>
           )}
         </Link>
 
@@ -209,17 +348,28 @@ export default function Post({ post }: PostProps) {
       <div className="px-3 pt-2 pb-1">
         {/* AI Analysis button - top, primary button */}
         <button
-          className="flex w-full items-center justify-center gap-2 rounded-md mb-2 py-2.5
-                   bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold
-                   hover:from-blue-500 hover:to-purple-500 shadow-md hover:shadow-lg
-                   transform hover:scale-[1.02] transition-all duration-200"
+          className={`flex w-full items-center justify-center gap-2 rounded-md mb-2 py-2.5
+                   ${!tokenCheck.data?.hasTokens
+                   ? 'bg-gradient-to-r from-gray-500 to-gray-600 cursor-not-allowed'
+                   : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transform hover:scale-[1.02]'}
+                   text-white font-bold shadow-md hover:shadow-lg transition-all duration-200`}
           onClick={checkReality}
-          disabled={loadingRealityCheck}
+          disabled={loadingRealityCheck || !tokenCheck.data?.hasTokens || tokenCheck.isLoading}
+          title={!tokenCheck.data?.hasTokens ? "Not enough tokens for this operation" : "Analyze this post with AI"}
         >
           {loadingRealityCheck ? (
             <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          ) : tokenCheck.isLoading ? (
+            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          ) : !tokenCheck.data?.hasTokens ? (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+              <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clipRule="evenodd" />
             </svg>
           ) : (
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
@@ -227,7 +377,15 @@ export default function Post({ post }: PostProps) {
               <path fillRule="evenodd" d="M9.013 19.9a.75.75 0 01.877-.597 11.319 11.319 0 004.22 0 .75.75 0 11.28 1.473 12.819 12.819 0 01-4.78 0 .75.75 0 01-.597-.876zM9.754 22.344a.75.75 0 01.824-.668 13.682 13.682 0 002.844 0 .75.75 0 11.156 1.492 15.156 15.156 0 01-3.156 0 .75.75 0 01-.668-.824z" clipRule="evenodd" />
             </svg>
           )}
-          <span className="text-base">{loadingRealityCheck ? "Analyzing..." : "AI ANALYSIS"}</span>
+          <span className="text-base">
+            {loadingRealityCheck
+              ? "Analyzing..."
+              : tokenCheck.isLoading
+                ? "Checking tokens..."
+                : !tokenCheck.data?.hasTokens
+                  ? "Insufficient tokens"
+                  : "AI ANALYSIS"}
+          </span>
         </button>
 
         {/* Like/Comment/Share buttons with counts */}
@@ -350,9 +508,9 @@ export default function Post({ post }: PostProps) {
         <div className="border-t border-border-color px-3 py-3">
           {/* კომენტარის ფორმა */}
           <form onSubmit={handleComment} className="mb-3 flex gap-2">
-            <Image 
-              src="https://ui-avatars.com/api/?name=Test+User&background=4CAF50&color=fff"
-              alt="Your profile" 
+            <Image
+              src={session?.user?.image || "https://ui-avatars.com/api/?name=User&background=4CAF50&color=fff"}
+              alt="Your profile"
               width={32}
               height={32}
               className="h-8 w-8 rounded-full"
@@ -434,5 +592,6 @@ export default function Post({ post }: PostProps) {
         </div>
       )}
     </article>
+    </ErrorBoundary>
   );
 }

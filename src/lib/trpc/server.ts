@@ -22,36 +22,168 @@ export const createTRPCContext = async (opts: CreateContextOptions) => {
   };
 };
 
+// Enable detailed logging in development only
+const enableDebugLogging = process.env.NODE_ENV === 'development';
+
 const t = initTRPC.context<typeof createTRPCContext>().create({
   transformer: superjson,
+  // Enhanced error formatting for better debugging
   errorFormatter({ shape, error }) {
+    // Log error details in development for debugging
+    if (enableDebugLogging) {
+      console.error('[tRPC Error]', {
+        path: shape.path,
+        error: error.message,
+        stack: error.stack,
+        cause: error.cause,
+      });
+    }
+
     return {
       ...shape,
       data: {
         ...shape.data,
-        zodError:
-          error.cause instanceof ZodError ? error.cause.flatten() : null,
+        zodError: error.cause instanceof ZodError ? error.cause.flatten() : null,
+        // Include more helpful error details for easier debugging
+        code: shape.code,
+        httpStatus: shape.httpStatus,
+        path: shape.path,
+        stack: enableDebugLogging ? error.stack : undefined,
       },
     };
   },
 });
 
 export const createCallerFactory = t.createCallerFactory;
+
+// Define middleware for performance logging in development
+const performanceMiddleware = t.middleware(async ({ path, type, next }) => {
+  // Skip performance tracking in production
+  if (process.env.NODE_ENV === 'production') {
+    return next();
+  }
+
+  const start = Date.now();
+  const result = await next();
+  const durationMs = Date.now() - start;
+
+  // Log slow queries (> 100ms) to console
+  if (durationMs > 100) {
+    console.warn(`[tRPC Performance] 🐢 Slow ${type} on ${path}: ${durationMs}ms`);
+  } else if (enableDebugLogging) {
+    console.log(`[tRPC Performance] ⚡ ${type} on ${path}: ${durationMs}ms`);
+  }
+
+  return result;
+});
+
+// Middleware for token rate limiting
+const tokenLimitMiddleware = t.middleware(async ({ ctx, next }) => {
+  // Skip for non-authenticated users
+  if (!ctx.session?.user) {
+    return next();
+  }
+
+  try {
+    // Add token usage data to context for protected routes
+    const userId = ctx.session.user.id;
+
+    // This could be extended to check for rate limiting or token limits
+    // Here we just pass through for now but update the context
+
+    return next({
+      ctx: {
+        ...ctx,
+        // Add token info to context for AI operations later
+        tokenInfo: {
+          userId,
+          checked: true,
+          timestamp: Date.now(),
+        }
+      }
+    });
+  } catch (error) {
+    // Don't block the request, just log the error
+    console.error('Error in token middleware:', error);
+    return next();
+  }
+});
+
+// Cache manager to avoid redundant requests
+// A simple in-memory cache for development
+const cacheManager = new Map<string, { data: any; timestamp: number }>();
+
+// Middleware for caching repetitive queries
+const cacheMiddleware = t.middleware(async ({ path, rawInput, type, next }) => {
+  // Only apply caching to queries, not mutations
+  if (type !== 'query') {
+    return next();
+  }
+
+  // Generate a cache key based on path and input
+  const cacheKey = `${path}-${JSON.stringify(rawInput)}`;
+
+  // Check if we have a cached response and it's less than 1 minute old
+  const cachedItem = cacheManager.get(cacheKey);
+  if (cachedItem && Date.now() - cachedItem.timestamp < 60000) {
+    if (enableDebugLogging) {
+      console.log(`[tRPC Cache] 🔵 Cache hit for ${path}`);
+    }
+    return { ok: true, data: cachedItem.data };
+  }
+
+  // Execute the request
+  const result = await next();
+
+  // Cache the response for future requests
+  if (result.ok) {
+    cacheManager.set(cacheKey, {
+      data: result.data,
+      timestamp: Date.now()
+    });
+
+    // Prevent the cache from growing too large
+    if (cacheManager.size > 1000) {
+      // Remove the oldest entry
+      const oldestKey = [...cacheManager.entries()]
+        .sort(([, a], [, b]) => a.timestamp - b.timestamp)[0][0];
+      cacheManager.delete(oldestKey);
+    }
+
+    if (enableDebugLogging) {
+      console.log(`[tRPC Cache] 🟢 Cache set for ${path}`);
+    }
+  }
+
+  return result;
+});
+
+// Base procedures with performance tracking and optional caching
+const baseProcedure = t.procedure
+  .use(performanceMiddleware)
+  .use(cacheMiddleware);
+
 export const router = t.router;
-export const publicProcedure = t.procedure;
+export const publicProcedure = baseProcedure;
 
 const enforceUserIsAuthed = t.middleware(({ ctx, next }) => {
   if (!ctx.session || !ctx.session.user) {
-    throw new TRPCError({ code: 'UNAUTHORIZED' });
+    throw new TRPCError({
+      code: 'UNAUTHORIZED',
+      message: 'You must be logged in to access this resource'
+    });
   }
   return next({
     ctx: {
+      ...ctx,
       session: { ...ctx.session, user: ctx.session.user },
     },
   });
 });
 
-export const protectedProcedure = t.procedure.use(enforceUserIsAuthed);
+export const protectedProcedure = baseProcedure
+  .use(tokenLimitMiddleware)
+  .use(enforceUserIsAuthed);
 
 // Middleware to check if the user is an admin
 const enforceUserIsAdmin = t.middleware(async ({ ctx, next }) => {
