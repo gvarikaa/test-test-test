@@ -5,9 +5,10 @@ import { useParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import FacebookHeader from '../../components/layouts/FacebookHeader';
-import LeftSidebar from '../../components/layouts/LeftSidebar';
-import RightSidebar from '../../components/layouts/RightSidebar';
+import GroupLeftSidebar from '../../components/groups/GroupLeftSidebar';
+import GroupRightSidebar from '../../components/groups/GroupRightSidebar';
 import MobileNavigation from '../../components/layouts/MobileNavigation';
+import CreatePostBox from '../../components/feed/CreatePostBox';
 
 export default function GroupDetailsPage() {
   const params = useParams<{ handle: string }>();
@@ -138,19 +139,61 @@ export default function GroupDetailsPage() {
   };
   
   return (
-    <div className="min-h-screen bg-dark-bg">
+    <div className="min-h-screen bg-gray-950">
       {/* Header */}
       <FacebookHeader />
 
+      {/* Group-specific styles */}
+      <style jsx global>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        @keyframes shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+
+        .group-shine {
+          position: relative;
+          overflow: hidden;
+        }
+
+        .group-shine::after {
+          content: '';
+          position: absolute;
+          top: 0;
+          right: 0;
+          bottom: 0;
+          left: 0;
+          transform: translateX(-100%);
+          background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(255, 255, 255, 0.05),
+            transparent
+          );
+          animation: shimmer 3s infinite;
+        }
+
+        .animate-fade-in {
+          animation: fadeIn 0.6s ease-out forwards;
+        }
+      `}</style>
+
       {/* Main content */}
       <div className="flex justify-center px-0 lg:px-4">
-        {/* Left sidebar - navigation */}
-        <LeftSidebar />
+        {/* Left sidebar - group navigation */}
+        <GroupLeftSidebar
+          group={mockGroup}
+          isMember={isMember}
+        />
 
         {/* Main column - group content */}
         <main className="w-full max-w-[680px] px-0 pb-4 sm:px-4">
           {/* Group header/cover */}
-          <div className="mb-4 overflow-hidden rounded-lg bg-card-bg shadow-sm">
+          <div className="mb-4 overflow-hidden rounded-lg bg-gray-900 border border-gray-800/40 shadow-md animate-fade-in">
             {/* Cover image */}
             <div className="relative h-48 w-full bg-gray-700 sm:h-64">
               {mockGroup.coverImage ? (
@@ -244,14 +287,14 @@ export default function GroupDetailsPage() {
             </div>
             
             {/* Group tabs */}
-            <div className="border-t border-border-color px-4 sm:px-6">
+            <div className="border-t border-gray-800/40 px-4 sm:px-6">
               <div className="flex overflow-x-auto">
                 <button
                   onClick={() => setActiveTab('feed')}
                   className={`flex-shrink-0 border-b-2 px-4 py-3 text-sm font-medium ${
                     activeTab === 'feed'
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-text-secondary hover:text-text-primary'
+                      ? 'border-indigo-500 text-indigo-400'
+                      : 'border-transparent text-gray-400 hover:text-gray-300'
                   }`}
                 >
                   Feed
@@ -260,8 +303,8 @@ export default function GroupDetailsPage() {
                   onClick={() => setActiveTab('about')}
                   className={`flex-shrink-0 border-b-2 px-4 py-3 text-sm font-medium ${
                     activeTab === 'about'
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-text-secondary hover:text-text-primary'
+                      ? 'border-indigo-500 text-indigo-400'
+                      : 'border-transparent text-gray-400 hover:text-gray-300'
                   }`}
                 >
                   About
@@ -270,8 +313,8 @@ export default function GroupDetailsPage() {
                   onClick={() => setActiveTab('members')}
                   className={`flex-shrink-0 border-b-2 px-4 py-3 text-sm font-medium ${
                     activeTab === 'members'
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-text-secondary hover:text-text-primary'
+                      ? 'border-indigo-500 text-indigo-400'
+                      : 'border-transparent text-gray-400 hover:text-gray-300'
                   }`}
                 >
                   Members
@@ -281,8 +324,8 @@ export default function GroupDetailsPage() {
                     onClick={() => setActiveTab('requests')}
                     className={`flex-shrink-0 border-b-2 px-4 py-3 text-sm font-medium ${
                       activeTab === 'requests'
-                        ? 'border-primary text-primary'
-                        : 'border-transparent text-text-secondary hover:text-text-primary'
+                        ? 'border-indigo-500 text-indigo-400'
+                        : 'border-transparent text-gray-400 hover:text-gray-300'
                     }`}
                   >
                     Requests
@@ -293,8 +336,8 @@ export default function GroupDetailsPage() {
                     onClick={() => setActiveTab('events')}
                     className={`flex-shrink-0 border-b-2 px-4 py-3 text-sm font-medium ${
                       activeTab === 'events'
-                        ? 'border-primary text-primary'
-                        : 'border-transparent text-text-secondary hover:text-text-primary'
+                        ? 'border-indigo-500 text-indigo-400'
+                        : 'border-transparent text-gray-400 hover:text-gray-300'
                     }`}
                   >
                     Events
@@ -305,8 +348,8 @@ export default function GroupDetailsPage() {
                     onClick={() => setActiveTab('discussions')}
                     className={`flex-shrink-0 border-b-2 px-4 py-3 text-sm font-medium ${
                       activeTab === 'discussions'
-                        ? 'border-primary text-primary'
-                        : 'border-transparent text-text-secondary hover:text-text-primary'
+                        ? 'border-indigo-500 text-indigo-400'
+                        : 'border-transparent text-gray-400 hover:text-gray-300'
                     }`}
                   >
                     Discussions
@@ -317,8 +360,8 @@ export default function GroupDetailsPage() {
                     onClick={() => setActiveTab('files')}
                     className={`flex-shrink-0 border-b-2 px-4 py-3 text-sm font-medium ${
                       activeTab === 'files'
-                        ? 'border-primary text-primary'
-                        : 'border-transparent text-text-secondary hover:text-text-primary'
+                        ? 'border-indigo-500 text-indigo-400'
+                        : 'border-transparent text-gray-400 hover:text-gray-300'
                     }`}
                   >
                     Files
@@ -335,55 +378,22 @@ export default function GroupDetailsPage() {
               <>
                 {/* Create post box - only show if member */}
                 {isMember && (
-                  <div className="mb-4 rounded-lg bg-card-bg p-4 shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <div className="relative h-10 w-10 overflow-hidden rounded-full">
-                        <Image
-                          src="https://ui-avatars.com/api/?name=User&background=4F46E5&color=fff"
-                          alt="Your profile"
-                          fill
-                          className="object-cover"
-                          unoptimized
-                        />
-                      </div>
-                      <div className="flex-grow rounded-full bg-card-secondary-bg px-4 py-2 text-text-secondary">
-                        What's on your mind?
-                      </div>
-                    </div>
-                    <div className="mt-3 flex justify-between border-t border-border-color pt-3">
-                      <button className="flex items-center gap-2 rounded-lg px-3 py-1 text-text-secondary hover:bg-hover-bg">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="size-5">
-                          <path fillRule="evenodd" d="M1 8a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 018.07 3h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0016.07 6H17a2 2 0 012 2v7a2 2 0 01-2 2H3a2 2 0 01-2-2V8zm13.5 3a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM10 14a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-                        </svg>
-                        Photo
-                      </button>
-                      <button className="flex items-center gap-2 rounded-lg px-3 py-1 text-text-secondary hover:bg-hover-bg">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="size-5">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-.464 5.535a1 1 0 10-1.415-1.414 3 3 0 01-4.242 0 1 1 0 00-1.415 1.414 5 5 0 007.072 0z" clipRule="evenodd" />
-                        </svg>
-                        Feeling
-                      </button>
-                      <button className="flex items-center gap-2 rounded-lg px-3 py-1 text-text-secondary hover:bg-hover-bg">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="size-5">
-                          <path d="M5.25 12a.75.75 0 01.75-.75h.01a.75.75 0 01.75.75v.01a.75.75 0 01-.75.75H6a.75.75 0 01-.75-.75V12zM6 13.25a.75.75 0 00-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 00.75-.75V14a.75.75 0 00-.75-.75H6zM7.25 12a.75.75 0 01.75-.75h.01a.75.75 0 01.75.75v.01a.75.75 0 01-.75.75H8a.75.75 0 01-.75-.75V12zM8 13.25a.75.75 0 00-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 00.75-.75V14a.75.75 0 00-.75-.75H8zM9.25 10a.75.75 0 01.75-.75h.01a.75.75 0 01.75.75v.01a.75.75 0 01-.75.75H10a.75.75 0 01-.75-.75V10zM10 11.25a.75.75 0 00-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 00.75-.75V12a.75.75 0 00-.75-.75H10zM9.25 14a.75.75 0 01.75-.75h.01a.75.75 0 01.75.75v.01a.75.75 0 01-.75.75H10a.75.75 0 01-.75-.75V14zM12 9.25a.75.75 0 00-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 00.75-.75V10a.75.75 0 00-.75-.75H12zM11.25 12a.75.75 0 01.75-.75h.01a.75.75 0 01.75.75v.01a.75.75 0 01-.75.75H12a.75.75 0 01-.75-.75V12zM12 13.25a.75.75 0 00-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 00.75-.75V14a.75.75 0 00-.75-.75H12zM13.25 10a.75.75 0 01.75-.75h.01a.75.75 0 01.75.75v.01a.75.75 0 01-.75.75H14a.75.75 0 01-.75-.75V10zM14 11.25a.75.75 0 00-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 00.75-.75V12a.75.75 0 00-.75-.75H14z" />
-                          <path fillRule="evenodd" d="M5.75 2a.75.75 0 01.75.75V4h7V2.75a.75.75 0 011.5 0V4h.25A2.75 2.75 0 0118 6.75v8.5A2.75 2.75 0 0115.25 18H4.75A2.75 2.75 0 012 15.25v-8.5A2.75 2.75 0 014.75 4H5V2.75A.75.75 0 015.75 2zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75z" clipRule="evenodd" />
-                        </svg>
-                        Event
-                      </button>
-                    </div>
-                  </div>
+                  <>
+                    {/* Use same create post box as main page */}
+                    <CreatePostBox />
+                  </>
                 )}
-                
+
                 {/* Join group message for non-members */}
                 {!isMember && (
-                  <div className="mb-4 rounded-lg bg-card-bg p-6 text-center shadow-sm">
-                    <h2 className="text-lg font-semibold text-text-primary">Join this group to participate</h2>
-                    <p className="mt-2 text-text-secondary">
+                  <div className="mb-4 rounded-lg bg-gray-900 p-6 text-center shadow-md border border-gray-800/40">
+                    <h2 className="text-lg font-semibold text-gray-100">Join this group to participate</h2>
+                    <p className="mt-2 text-gray-400">
                       Join to see posts, comment, and interact with other members.
                     </p>
                     <button
                       onClick={handleJoinGroup}
-                      className="mt-4 rounded-lg bg-primary px-4 py-2 font-medium text-white hover:bg-primary/90"
+                      className="mt-4 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-700 px-4 py-2 font-medium text-white hover:opacity-90 transition-opacity shadow-md shadow-indigo-900/30"
                     >
                       Join Group
                     </button>
@@ -525,8 +535,11 @@ export default function GroupDetailsPage() {
           </div>
         </main>
 
-        {/* Right sidebar - chat and contacts */}
-        <RightSidebar />
+        {/* Right sidebar - group members and activity */}
+        <GroupRightSidebar
+          group={mockGroup}
+          isMember={isMember}
+        />
       </div>
 
       {/* Mobile navigation */}

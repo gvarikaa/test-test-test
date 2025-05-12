@@ -110,23 +110,41 @@ export default function CreatePostBox() {
     }
   };
 
+  // Define theme colors for consistent styling
+  const THEME = {
+    primaryGradient: "bg-gradient-to-r from-indigo-600 to-purple-700",
+    secondaryGradient: "bg-gradient-to-r from-violet-700 to-fuchsia-700",
+    accentGradient: "bg-gradient-to-r from-amber-600 to-orange-600",
+    cardBg: "bg-gray-900",
+    cardBgHover: "bg-gray-800/80",
+    cardBorder: "border-gray-800/40",
+    inputBg: "bg-gray-800/70",
+    textPrimary: "text-gray-100",
+    textSecondary: "text-gray-400",
+    glow: "shadow-lg shadow-indigo-950/40"
+  };
+
   return (
-    <div className="card mb-4 overflow-hidden">
-      <div className="p-3">
-        <div className="flex items-center gap-2">
-          <Image
-            src="https://ui-avatars.com/api/?name=Test+User&background=4CAF50&color=fff"
-            alt="Your profile"
-            width={40}
-            height={40}
-            className="h-10 w-10 rounded-full"
-          />
+    <div className={`mb-4 rounded-xl border ${THEME.cardBorder} ${THEME.cardBg} overflow-hidden relative ${THEME.glow}`}>
+      <div className="absolute inset-0 bg-gradient-to-b from-indigo-950/20 to-transparent"></div>
+      <div className="p-4 relative z-10">
+        <div className="flex items-center gap-3">
+          <div className="relative group">
+            <div className="absolute -inset-0.5 rounded-full opacity-75 bg-gradient-to-r from-indigo-500 to-purple-600 blur group-hover:opacity-100 transition duration-200"></div>
+            <Image
+              src="https://ui-avatars.com/api/?name=Test+User&background=4CAF50&color=fff"
+              alt="Your profile"
+              width={45}
+              height={45}
+              className="relative h-11 w-11 rounded-full border-2 border-gray-900"
+            />
+          </div>
 
           {!showRichEditor ? (
             <input
               type="text"
               placeholder="What's on your mind?"
-              className="flex-1 rounded-full bg-hover-bg px-4 py-2.5 text-text-primary placeholder:text-text-secondary focus:outline-none"
+              className={`flex-1 rounded-full ${THEME.inputBg} border ${THEME.cardBorder} px-4 py-3 ${THEME.textPrimary} placeholder:${THEME.textSecondary} focus:outline-none focus:border-indigo-700/50 transition-colors`}
               value={text}
               onChange={(e) => {
                 setText(e.target.value);
@@ -142,7 +160,7 @@ export default function CreatePostBox() {
               onFocus={() => setShowRichEditor(true)}
             />
           ) : (
-            <div className="flex-1">
+            <div className="flex-1 bg-gray-800/60 rounded-xl border border-gray-800/60 overflow-hidden">
               <RichTextEditor
                 content=""
                 placeholder="What's on your mind?"
@@ -155,19 +173,19 @@ export default function CreatePostBox() {
 
         {/* Error message display */}
         {error && (
-          <div className="mt-2 p-2 bg-red-100 text-red-700 rounded-md text-sm flex items-center">
-            <AlertTriangle className="w-4 h-4 mr-2" />
+          <div className="mt-3 p-3 bg-rose-900/30 border border-rose-800/40 text-rose-300 rounded-lg text-sm flex items-center">
+            <AlertTriangle className="w-4 h-4 mr-2 text-rose-400" />
             {error}
           </div>
         )}
 
         {/* Hashtags display */}
         {hashtags.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
+          <div className="mt-3 flex flex-wrap gap-1.5">
             {hashtags.map((tag, index) => (
               <span
                 key={index}
-                className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full"
+                className="px-2.5 py-1 bg-indigo-900/30 text-indigo-300 text-xs rounded-full border border-indigo-800/40"
               >
                 #{tag}
               </span>
@@ -177,72 +195,78 @@ export default function CreatePostBox() {
 
         {/* AI Content Analyzer (conditionally rendered) */}
         {showAnalyzer && text.trim() && (
-          <div className="mt-3">
-            <ContentAnalyzer
-              content={text}
-              onSuggestionApply={handleApplySuggestion}
-            />
+          <div className="mt-4 p-0.5 rounded-xl bg-gradient-to-r from-indigo-700/40 to-purple-700/40">
+            <div className="bg-gray-900 rounded-lg p-3">
+              <ContentAnalyzer
+                content={text}
+                onSuggestionApply={handleApplySuggestion}
+              />
+            </div>
           </div>
         )}
 
         {/* Post actions and submission */}
-        <div className="mt-3 border-t border-border-color pt-2">
+        <div className="mt-4 border-t border-gray-800/60 pt-3">
           <div className="flex flex-col">
-            <div className="flex justify-between mb-2">
+            <div className="flex flex-wrap md:flex-nowrap justify-between gap-1 mb-3">
               <button
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg p-2 hover:bg-hover-bg"
+                className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 px-3 ${THEME.cardBgHover} border ${THEME.cardBorder} hover:border-gray-700 transition-colors`}
                 disabled={submitting}
               >
-                <VideoIcon className="h-5 w-5 text-red-500" />
-                <span className="text-sm font-medium text-text-primary">Live video</span>
+                <VideoIcon className="h-5 w-5 text-red-400" />
+                <span className="text-sm font-medium text-gray-300">Live video</span>
               </button>
 
               <button
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg p-2 hover:bg-hover-bg"
+                className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 px-3 ${THEME.cardBgHover} border ${THEME.cardBorder} hover:border-gray-700 transition-colors`}
                 disabled={submitting}
               >
-                <ImageIcon className="h-5 w-5 text-green-500" />
-                <span className="text-sm font-medium text-text-primary">Photo/video</span>
+                <ImageIcon className="h-5 w-5 text-emerald-400" />
+                <span className="text-sm font-medium text-gray-300">Photo/video</span>
               </button>
 
               <button
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg p-2 hover:bg-hover-bg"
+                className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 px-3 ${THEME.cardBgHover} border ${THEME.cardBorder} hover:border-gray-700 transition-colors`}
                 disabled={submitting}
               >
-                <SmileIcon className="h-5 w-5 text-yellow-500" />
-                <span className="text-sm font-medium text-text-primary">Feeling/activity</span>
+                <SmileIcon className="h-5 w-5 text-amber-400" />
+                <span className="text-sm font-medium text-gray-300">Feeling</span>
               </button>
 
               <button
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg p-2 hover:bg-hover-bg"
+                className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 px-3 ${
+                  showAnalyzer
+                    ? 'bg-indigo-900/40 border-indigo-700/60'
+                    : `${THEME.cardBgHover} border ${THEME.cardBorder} hover:border-indigo-700/50`
+                } transition-colors`}
                 onClick={() => setShowAnalyzer(!showAnalyzer)}
                 disabled={!text.trim() || submitting}
               >
-                <Zap className="h-5 w-5 text-blue-500" />
-                <span className="text-sm font-medium text-text-primary">
+                <Zap className={`h-5 w-5 ${showAnalyzer ? 'text-indigo-300' : 'text-indigo-400'}`} />
+                <span className={`text-sm font-medium ${showAnalyzer ? 'text-indigo-300' : 'text-gray-300'}`}>
                   {showAnalyzer ? "Hide Analysis" : "AI Analysis"}
                 </span>
               </button>
             </div>
 
             {/* Post submission */}
-            <div className="flex justify-between mt-2">
+            <div className="flex flex-col sm:flex-row justify-between mt-1 gap-3">
               <div className="flex items-center">
-                <label className="flex items-center text-sm text-text-secondary">
+                <label className="flex items-center text-sm text-gray-400 hover:text-gray-300 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={runAiAnalysis}
                     onChange={(e) => setRunAiAnalysis(e.target.checked)}
-                    className="mr-2"
+                    className="mr-2 accent-indigo-500 h-4 w-4 rounded-sm"
                     disabled={submitting}
                   />
-                  Save AI analysis with post
+                  <span>Save AI analysis with post</span>
                 </label>
               </div>
               <button
                 onClick={handleSubmitPost}
                 disabled={!text.trim() || submitting}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`px-6 py-2.5 ${THEME.primaryGradient} text-white rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg shadow-indigo-900/40 font-medium`}
               >
                 {submitting ? "Posting..." : "Post"}
               </button>

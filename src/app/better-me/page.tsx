@@ -5,41 +5,72 @@ import { Suspense, useEffect, useState } from "react";
 import { api } from "@/lib/trpc/api";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { 
-  ChevronRight, 
-  HeartPulse, 
-  Utensils, 
-  Dumbbell, 
-  LineChart, 
+import {
+  ChevronRight,
+  Heart, // შევცვალე HeartPulse-ი Heart-ით, რადგან lucide-react-ში HeartPulse არაა
+  Utensils,
+  Dumbbell,
+  LineChart,
   MessageCircle,
-  Plus, 
+  Plus,
   Info,
   ArrowRight,
   Settings
 } from "lucide-react";
+
+// ამასთან, ჩვენი კოდისთვის, Heart-ს გადავარქმევ HeartPulse-ად
+const HeartPulse = Heart;
 import { AIRecommendations } from "./components/ai-recommendations";
 
 // Loading component
+// Define theme colors for consistent styling
+const THEME = {
+  // Primary gradients
+  primaryGradient: "bg-gradient-to-r from-indigo-600 to-purple-700",
+  secondaryGradient: "bg-gradient-to-r from-violet-700 to-fuchsia-700",
+  accentGradient: "bg-gradient-to-r from-amber-600 to-orange-600",
+
+  // Background levels
+  pageBg: "bg-gray-950",
+  cardBg: "bg-gray-900/70",
+  cardBgHover: "hover:bg-gray-800/80",
+  inputBg: "bg-gray-800/60",
+
+  // Text colors
+  textPrimary: "text-gray-100",
+  textSecondary: "text-gray-400",
+  textMuted: "text-gray-500",
+
+  // Border colors
+  borderColor: "border-gray-800/40",
+
+  // Effects
+  glow: "shadow-lg shadow-indigo-950/30",
+  hoverTransition: "transition-all duration-200"
+};
+
 const LoadingState = () => (
   <div className="w-full h-[60vh] flex flex-col items-center justify-center">
-    <div className="animate-pulse h-20 w-20 rounded-full bg-primary/20 flex items-center justify-center">
-      <HeartPulse className="text-primary h-10 w-10 animate-pulse" />
+    <div className={`animate-pulse h-20 w-20 rounded-full ${THEME.primaryGradient} bg-opacity-20 flex items-center justify-center ${THEME.glow}`}>
+      <HeartPulse className="text-white h-10 w-10 animate-pulse" />
     </div>
-    <p className="mt-4 text-muted-foreground">ინფორმაციის ჩატვირთვა...</p>
+    <p className={`mt-4 ${THEME.textSecondary}`}>ინფორმაციის ჩატვირთვა...</p>
   </div>
 );
 
 // No profile state component
 const NoHealthProfile = () => (
-  <div className="flex flex-col items-center justify-center py-16 px-4 border rounded-lg bg-muted/10 text-center">
-    <HeartPulse className="h-16 w-16 text-primary/50 mb-6" />
-    <h2 className="text-2xl font-medium mb-2">ჯერ არ გაქვთ ჯანმრთელობის პროფილი</h2>
-    <p className="text-muted-foreground mb-8 max-w-md">
+  <div className={`flex flex-col items-center justify-center py-16 px-4 border ${THEME.borderColor} rounded-lg ${THEME.cardBg} backdrop-blur-sm text-center ${THEME.glow}`}>
+    <div className={`${THEME.primaryGradient} p-5 rounded-full ${THEME.glow} mb-6`}>
+      <HeartPulse className="h-14 w-14 text-white" />
+    </div>
+    <h2 className={`text-2xl font-medium mb-2 ${THEME.textPrimary}`}>ჯერ არ გაქვთ ჯანმრთელობის პროფილი</h2>
+    <p className={`${THEME.textSecondary} mb-8 max-w-md`}>
       შექმენით თქვენი ჯანმრთელობის პროფილი პერსონალიზებული გეგმების, რჩევების და პროგრესის თვალყურის დევნებისთვის.
     </p>
-    <Link 
-      href="/better-me/create-profile" 
-      className="px-6 py-3 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors flex items-center"
+    <Link
+      href="/better-me/create-profile"
+      className={`px-6 py-3 ${THEME.primaryGradient} text-white rounded-md hover:opacity-90 ${THEME.hoverTransition} flex items-center ${THEME.glow}`}
     >
       <Plus className="mr-2 h-5 w-5" />
       პროფილის შექმნა
@@ -59,24 +90,24 @@ interface FeatureCardProps {
 const FeatureCard = ({ title, description, icon, href, disabled = false }: FeatureCardProps) => (
   <Link
     href={disabled ? "#" : href}
-    className={`block p-6 border rounded-lg hover:shadow-md transition-all ${
-      disabled 
-        ? "opacity-50 cursor-not-allowed bg-muted/5" 
-        : "hover:border-primary/50 hover:bg-primary/5"
+    className={`group block p-6 border ${THEME.borderColor} rounded-lg ${THEME.hoverTransition} ${THEME.glow} backdrop-blur-sm ${
+      disabled
+        ? "opacity-50 cursor-not-allowed bg-gray-900/30"
+        : `${THEME.cardBg} hover:translate-y-[-2px] hover:${THEME.glow}`
     }`}
   >
     <div className="flex justify-between items-start">
       <div className="flex gap-4 items-start">
-        <div className="p-2 bg-primary/10 rounded-md text-primary">
+        <div className={`p-3 ${THEME.primaryGradient} rounded-full text-white ${THEME.hoverTransition} group-hover:scale-110`}>
           {icon}
         </div>
         <div>
-          <h3 className="font-medium mb-1">{title}</h3>
-          <p className="text-sm text-muted-foreground">{description}</p>
+          <h3 className={`font-medium mb-1 ${THEME.textPrimary} group-hover:text-indigo-300 ${THEME.hoverTransition}`}>{title}</h3>
+          <p className={`text-sm ${THEME.textSecondary}`}>{description}</p>
         </div>
       </div>
-      {!disabled && <ChevronRight className="h-5 w-5 text-muted-foreground" />}
-      {disabled && <Info className="h-5 w-5 text-muted-foreground" title="მალე ხელმისაწვდომი იქნება" />}
+      {!disabled && <ChevronRight className={`h-5 w-5 ${THEME.textSecondary} group-hover:text-indigo-400 group-hover:translate-x-1 ${THEME.hoverTransition}`} />}
+      {disabled && <Info className={`h-5 w-5 ${THEME.textSecondary}`} title="მალე ხელმისაწვდომი იქნება" />}
     </div>
   </Link>
 );
@@ -133,223 +164,283 @@ export default function BetterMePage() {
   }
 
   return (
-    <div className="container max-w-6xl py-8">
+    <div className={`mx-auto px-4 sm:px-6 py-8 ${THEME.textPrimary} max-w-7xl`}>
+      {/* Add global styles to help with animations */}
+      <style jsx global>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-out forwards;
+        }
+        .backdrop-blur-sm {
+          backdrop-filter: blur(8px);
+        }
+        .backdrop-saturate-150 {
+          backdrop-filter: saturate(150%);
+        }
+      `}</style>
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Better Me</h1>
-          <p className="text-muted-foreground">თქვენი პერსონალური ჯანმრთელობისა და კეთილდღეობის ასისტენტი</p>
+      <header className={`w-full mb-8 flex flex-col gap-6 md:flex-row md:items-center md:justify-between ${THEME.glow}`}>
+        <div className="flex items-center gap-4">
+          <div className={`p-4 rounded-xl ${THEME.primaryGradient} ${THEME.glow} hidden sm:block`}>
+            <HeartPulse className="h-6 w-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-purple-500 text-transparent bg-clip-text mb-1">Better Me</h1>
+            <p className={`${THEME.textSecondary}`}>თქვენი პერსონალური ჯანმრთელობისა და კეთილდღეობის ასისტენტი</p>
+          </div>
         </div>
-        
-        <div className="flex items-center gap-3">
-          <Link 
-            href="/better-me/settings" 
-            className="flex items-center px-4 py-2 text-sm border rounded-md hover:bg-muted/10"
-          >
-            <Settings className="h-4 w-4 mr-2" />
-            პარამეტრები
-          </Link>
-          
+
+        <div className="flex flex-wrap items-center gap-3">
           {tokenInfo && (
-            <div className="px-4 py-2 text-sm bg-muted/10 rounded-md">
-              <span className="font-medium">{tokenInfo.usage}</span>
-              <span className="text-muted-foreground"> / {tokenInfo.limit} ტოკენი</span>
+            <div className={`px-4 py-2 text-sm ${THEME.cardBg} border ${THEME.borderColor} rounded-md backdrop-blur-sm`}>
+              <span className="font-medium text-indigo-400">{tokenInfo.usage}</span>
+              <span className={`${THEME.textSecondary}`}> / {tokenInfo.limit} ტოკენი</span>
             </div>
           )}
+
+          <Link
+            href="/better-me/settings"
+            className={`flex items-center px-4 py-2 text-sm border ${THEME.borderColor} rounded-md ${THEME.cardBgHover} ${THEME.hoverTransition}`}
+          >
+            <Settings className={`h-4 w-4 mr-2 ${THEME.textSecondary}`} />
+            პარამეტრები
+          </Link>
         </div>
+      </header>
+
+      {/* Quick navigation buttons */}
+      <div className={`w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8`}>
+        <Link
+          href="/better-me"
+          className={`flex items-center gap-3 p-4 border ${THEME.borderColor} rounded-lg ${THEME.primaryGradient} backdrop-blur-sm ${THEME.glow}`}
+        >
+          <HeartPulse className="h-6 w-6 text-white" />
+          <span className="font-medium text-white">მთავარი</span>
+        </Link>
+
+        <Link
+          href="/better-me/meal-plans"
+          className={`flex items-center gap-3 p-4 border ${THEME.borderColor} rounded-lg ${THEME.cardBg} backdrop-blur-sm ${THEME.hoverTransition} hover:bg-gray-800/60 hover:translate-x-1`}
+        >
+          <Utensils className="h-6 w-6 text-indigo-400" />
+          <span>კვების გეგმები</span>
+        </Link>
+
+        <Link
+          href="/better-me/workouts"
+          className={`flex items-center gap-3 p-4 border ${THEME.borderColor} rounded-lg ${THEME.cardBg} backdrop-blur-sm ${THEME.hoverTransition} hover:bg-gray-800/60 hover:translate-x-1`}
+        >
+          <Dumbbell className="h-6 w-6 text-indigo-400" />
+          <span>ვარჯიშები</span>
+        </Link>
+
+        <Link
+          href="/better-me/progress"
+          className={`flex items-center gap-3 p-4 border ${THEME.borderColor} rounded-lg ${THEME.cardBg} backdrop-blur-sm ${THEME.hoverTransition} hover:bg-gray-800/60 hover:translate-x-1`}
+        >
+          <LineChart className="h-6 w-6 text-indigo-400" />
+          <span>პროგრესი</span>
+        </Link>
       </div>
-      
-      {/* Main content */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {/* Left sidebar - Profile & Menu */}
-        <div className="space-y-6">
+
+      {/* Main content grid - with better layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        {/* Left sidebar - Now narrower and more compact */}
+        <div className="lg:col-span-1 space-y-6">
           {/* Profile card */}
-          <div className="border rounded-lg p-5 bg-card">
-            <div className="mb-4">
-              <h3 className="text-lg font-medium mb-1">ჩემი პროფილი</h3>
-              <p className="text-sm text-muted-foreground">ჯანმრთელობის პერსონალური ინფორმაცია</p>
+          <div className={`border ${THEME.borderColor} rounded-lg overflow-hidden ${THEME.cardBg} backdrop-blur-sm ${THEME.glow}`}>
+            <div className={`bg-gradient-to-r from-gray-900/90 to-gray-800/90 px-4 py-3 border-b ${THEME.borderColor}`}>
+              <h3 className={`font-medium ${THEME.textPrimary} flex items-center`}>
+                <span className={`w-5 h-5 ${THEME.primaryGradient} rounded-full flex items-center justify-center mr-2`}>
+                  <span className="text-white text-xs">👤</span>
+                </span>
+                ჩემი პროფილი
+              </h3>
             </div>
-            
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="text-muted-foreground">ასაკი:</div>
-                <div>{healthProfile.age || "არ არის მითითებული"}</div>
+
+            <div className="p-4">
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className={`${THEME.textSecondary}`}>ასაკი:</span>
+                  <span className="font-medium">{healthProfile.age || "—"}</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className={`${THEME.textSecondary}`}>სიმაღლე:</span>
+                  <span className="font-medium">{healthProfile.height ? `${healthProfile.height} სმ` : "—"}</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className={`${THEME.textSecondary}`}>წონა:</span>
+                  <span className="font-medium">{healthProfile.weight ? `${healthProfile.weight} კგ` : "—"}</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className={`${THEME.textSecondary}`}>აქტიურობა:</span>
+                  <span className="font-medium">{healthProfile.activityLevel || "—"}</span>
+                </div>
               </div>
-              
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="text-muted-foreground">სიმაღლე:</div>
-                <div>{healthProfile.height ? `${healthProfile.height} სმ` : "არ არის მითითებული"}</div>
+
+              <div className={`mt-4 pt-3 border-t ${THEME.borderColor} flex justify-end`}>
+                <Link
+                  href="/better-me/edit-profile"
+                  className="text-sm text-indigo-400 flex items-center hover:text-indigo-300 transition-colors"
+                >
+                  რედაქტირება
+                  <ArrowRight className="ml-1 h-3 w-3" />
+                </Link>
               </div>
-              
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="text-muted-foreground">წონა:</div>
-                <div>{healthProfile.weight ? `${healthProfile.weight} კგ` : "არ არის მითითებული"}</div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="text-muted-foreground">აქტიურობა:</div>
-                <div>{healthProfile.activityLevel || "არ არის მითითებული"}</div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="text-muted-foreground">კვებითი შეზღუდვები:</div>
-                <div>{healthProfile.dietaryRestrictions || "არ არის მითითებული"}</div>
-              </div>
-            </div>
-            
-            <div className="mt-4 pt-4 border-t">
-              <Link
-                href="/better-me/edit-profile"
-                className="text-sm text-primary flex items-center hover:underline"
-              >
-                პროფილის რედაქტირება
-                <ArrowRight className="ml-1 h-3 w-3" />
-              </Link>
             </div>
           </div>
-          
-          {/* Navigation menu */}
-          <nav className="border rounded-lg overflow-hidden">
-            <div className="bg-muted/10 px-4 py-3">
-              <h3 className="font-medium">Better Me მენიუ</h3>
-            </div>
-            <div className="divide-y">
-              <Link href="/better-me" className="flex items-center px-4 py-3 hover:bg-muted/5 bg-primary/5">
-                <HeartPulse className="h-5 w-5 mr-3 text-primary" />
-                <span>მთავარი</span>
-              </Link>
-              
-              <Link href="/better-me/meal-plans" className="flex items-center px-4 py-3 hover:bg-muted/5">
-                <Utensils className="h-5 w-5 mr-3 text-muted-foreground" />
-                <span>კვების გეგმები</span>
-              </Link>
-              
-              <Link href="/better-me/workouts" className="flex items-center px-4 py-3 hover:bg-muted/5">
-                <Dumbbell className="h-5 w-5 mr-3 text-muted-foreground" />
-                <span>ვარჯიშის რუტინები</span>
-              </Link>
-              
-              <Link href="/better-me/progress" className="flex items-center px-4 py-3 hover:bg-muted/5">
-                <LineChart className="h-5 w-5 mr-3 text-muted-foreground" />
-                <span>პროგრესის თვალყურის დევნება</span>
-              </Link>
-              
-              <Link href="/better-me/chat" className="flex items-center px-4 py-3 hover:bg-muted/5">
-                <MessageCircle className="h-5 w-5 mr-3 text-muted-foreground" />
-                <span>AI ასისტენტი</span>
-              </Link>
-            </div>
-          </nav>
-          
+
           {/* Upgrade prompt - only show for free users */}
           {tokenInfo?.tier === "FREE" && (
-            <div className="bg-gradient-to-br from-accent-blue via-purple-600 to-pink-500 rounded-lg p-5 text-white">
-              <h3 className="font-medium mb-2">გააუმჯობესეთ თქვენი გამოცდილება</h3>
+            <div className={`bg-gradient-to-br from-indigo-600 via-purple-700 to-fuchsia-600 rounded-lg p-5 text-white ${THEME.glow}`}>
+              <h3 className="font-medium mb-2 flex items-center gap-2">
+                <span className="text-yellow-300 text-xs">⭐</span>
+                გააუმჯობესეთ
+              </h3>
               <p className="text-sm mb-4 opacity-90">
-                მიიღეთ წვდომა დამატებით AI ფუნქციებზე, მეტი კვების გეგმაზე და პერსონალიზებულ რეკომენდაციებზე.
+                მიიღეთ წვდომა დამატებით AI ფუნქციებზე და პერსონალიზებულ რეკომენდაციებზე.
               </p>
-              <Link 
-                href="/better-me/upgrade" 
-                className="inline-block px-4 py-2 bg-white/20 rounded hover:bg-white/30 text-sm font-medium"
+              <Link
+                href="/better-me/upgrade"
+                className="inline-block px-4 py-2 bg-white/20 rounded-md hover:bg-white/30 text-sm font-medium transition-colors"
               >
                 პაკეტების ნახვა
               </Link>
             </div>
           )}
-        </div>
-        
-        {/* Main content */}
-        <div className="md:col-span-2 space-y-8">
-          {/* AI Recommendations */}
-          <Suspense fallback={<LoadingState />}>
-            <AIRecommendations healthProfileId={healthProfile.id} goals={selectedGoals} />
-          </Suspense>
-          
-          {/* Feature cards */}
-          <div>
-            <h2 className="text-xl font-medium mb-4">Better Me ფუნქციები</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FeatureCard 
-                title="კვების გეგმები"
-                description="შექმენით პერსონალიზებული კვების გეგმები და შეისწავლეთ ჯანსაღი რეცეპტები"
-                icon={<Utensils className="h-5 w-5" />}
-                href="/better-me/meal-plans"
-              />
-              
-              <FeatureCard 
-                title="ვარჯიშის რუტინები"
-                description="აღმოაჩინეთ ვარჯიშის პროგრამები, რომლებიც შეესაბამება თქვენს მიზნებს"
-                icon={<Dumbbell className="h-5 w-5" />}
-                href="/better-me/workouts"
-              />
-              
-              <FeatureCard 
-                title="პროგრესის თვალყურის დევნება"
-                description="თვალყური ადევნეთ თქვენს ჯანმრთელობას, წონას და სხვა მაჩვენებლებს"
-                icon={<LineChart className="h-5 w-5" />}
-                href="/better-me/progress"
-              />
-              
-              <FeatureCard 
-                title="AI ასისტენტთან ჩეთი"
-                description="მიიღეთ რჩევები და პასუხები თქვენს კითხვებზე ჯანმრთელობის შესახებ"
-                icon={<MessageCircle className="h-5 w-5" />}
-                href="/better-me/chat"
-              />
+
+          {/* Quick actions moved to sidebar */}
+          <div className={`border ${THEME.borderColor} rounded-lg overflow-hidden ${THEME.cardBg} backdrop-blur-sm ${THEME.glow}`}>
+            <div className={`bg-gradient-to-r from-gray-900/90 to-gray-800/90 px-4 py-3 border-b ${THEME.borderColor}`}>
+              <h3 className={`font-medium ${THEME.textPrimary} flex items-center`}>
+                <span className={`w-5 h-5 ${THEME.accentGradient} rounded-full flex items-center justify-center mr-2`}>
+                  <Plus className="h-3 w-3 text-white" />
+                </span>
+                სწრაფი მოქმედებები
+              </h3>
+            </div>
+
+            <div className="p-2">
+              <div className="space-y-1">
+                <Link
+                  href="/better-me/new-meal-plan"
+                  className={`group block p-3 rounded-md ${THEME.hoverTransition} hover:bg-gray-800/60`}
+                >
+                  <div className="flex items-center">
+                    <div className={`p-1.5 mr-3 ${THEME.accentGradient} rounded-full text-white ${THEME.hoverTransition} group-hover:scale-110`}>
+                      <Plus className="h-3 w-3" />
+                    </div>
+                    <span className="group-hover:text-indigo-300 transition-colors text-sm">ახალი კვების გეგმა</span>
+                  </div>
+                </Link>
+
+                <Link
+                  href="/better-me/new-workout"
+                  className={`group block p-3 rounded-md ${THEME.hoverTransition} hover:bg-gray-800/60`}
+                >
+                  <div className="flex items-center">
+                    <div className={`p-1.5 mr-3 ${THEME.accentGradient} rounded-full text-white ${THEME.hoverTransition} group-hover:scale-110`}>
+                      <Plus className="h-3 w-3" />
+                    </div>
+                    <span className="group-hover:text-indigo-300 transition-colors text-sm">ახალი ვარჯიში</span>
+                  </div>
+                </Link>
+
+                <Link
+                  href="/better-me/track-progress"
+                  className={`group block p-3 rounded-md ${THEME.hoverTransition} hover:bg-gray-800/60`}
+                >
+                  <div className="flex items-center">
+                    <div className={`p-1.5 mr-3 ${THEME.accentGradient} rounded-full text-white ${THEME.hoverTransition} group-hover:scale-110`}>
+                      <Plus className="h-3 w-3" />
+                    </div>
+                    <span className="group-hover:text-indigo-300 transition-colors text-sm">პროგრესის ჩაწერა</span>
+                  </div>
+                </Link>
+
+                <Link
+                  href="/better-me/chat"
+                  className={`group block p-3 rounded-md ${THEME.hoverTransition} hover:bg-gray-800/60`}
+                >
+                  <div className="flex items-center">
+                    <div className={`p-1.5 mr-3 ${THEME.secondaryGradient} rounded-full text-white ${THEME.hoverTransition} group-hover:scale-110`}>
+                      <MessageCircle className="h-3 w-3" />
+                    </div>
+                    <span className="group-hover:text-indigo-300 transition-colors text-sm">AI ასისტენტთან ჩეთი</span>
+                  </div>
+                </Link>
+              </div>
             </div>
           </div>
-          
-          {/* Quick actions */}
-          <div>
-            <h2 className="text-xl font-medium mb-4">სწრაფი მოქმედებები</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Link
-                href="/better-me/new-meal-plan"
-                className="block p-4 border rounded-lg hover:border-primary/50 hover:bg-primary/5 transition-all"
-              >
-                <div className="flex items-center">
-                  <div className="p-2 mr-4 bg-primary/10 rounded-md text-primary">
-                    <Plus className="h-4 w-4" />
-                  </div>
-                  <span>ახალი კვების გეგმის შექმნა</span>
-                </div>
-              </Link>
-              
-              <Link
-                href="/better-me/new-workout"
-                className="block p-4 border rounded-lg hover:border-primary/50 hover:bg-primary/5 transition-all"
-              >
-                <div className="flex items-center">
-                  <div className="p-2 mr-4 bg-primary/10 rounded-md text-primary">
-                    <Plus className="h-4 w-4" />
-                  </div>
-                  <span>ახალი ვარჯიშის პროგრამის შექმნა</span>
-                </div>
-              </Link>
-              
-              <Link
-                href="/better-me/track-progress"
-                className="block p-4 border rounded-lg hover:border-primary/50 hover:bg-primary/5 transition-all"
-              >
-                <div className="flex items-center">
-                  <div className="p-2 mr-4 bg-primary/10 rounded-md text-primary">
-                    <Plus className="h-4 w-4" />
-                  </div>
-                  <span>დღევანდელი პროგრესის ჩაწერა</span>
-                </div>
-              </Link>
-              
-              <Link
-                href="/better-me/chat"
-                className="block p-4 border rounded-lg hover:border-primary/50 hover:bg-primary/5 transition-all"
-              >
-                <div className="flex items-center">
-                  <div className="p-2 mr-4 bg-primary/10 rounded-md text-primary">
-                    <MessageCircle className="h-4 w-4" />
-                  </div>
-                  <span>რჩევის კითხვა AI ასისტენტისგან</span>
-                </div>
-              </Link>
+        </div>
+
+        {/* Main content - Wider and more focused */}
+        <div className="lg:col-span-3 space-y-8">
+          {/* Feature cards - Now more prominent */}
+          <div className={`border ${THEME.borderColor} rounded-lg overflow-hidden ${THEME.cardBg} backdrop-blur-sm ${THEME.glow}`}>
+            <div className={`bg-gradient-to-r from-gray-900/90 to-gray-800/90 px-4 py-3 border-b ${THEME.borderColor}`}>
+              <h2 className={`font-medium ${THEME.textPrimary} flex items-center`}>
+                <span className={`w-6 h-6 ${THEME.primaryGradient} rounded-full flex items-center justify-center mr-2`}>
+                  <HeartPulse className="h-3 w-3 text-white" />
+                </span>
+                Better Me ფუნქციები
+              </h2>
+            </div>
+
+            <div className="p-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FeatureCard
+                  title="კვების გეგმები"
+                  description="შექმენით პერსონალიზებული კვების გეგმები და შეისწავლეთ ჯანსაღი რეცეპტები"
+                  icon={<Utensils className="h-5 w-5" />}
+                  href="/better-me/meal-plans"
+                />
+
+                <FeatureCard
+                  title="ვარჯიშის რუტინები"
+                  description="აღმოაჩინეთ ვარჯიშის პროგრამები, რომლებიც შეესაბამება თქვენს მიზნებს"
+                  icon={<Dumbbell className="h-5 w-5" />}
+                  href="/better-me/workouts"
+                />
+
+                <FeatureCard
+                  title="პროგრესის თვალყურის დევნება"
+                  description="თვალყური ადევნეთ თქვენს ჯანმრთელობას, წონას და სხვა მაჩვენებლებს"
+                  icon={<LineChart className="h-5 w-5" />}
+                  href="/better-me/progress"
+                />
+
+                <FeatureCard
+                  title="AI ასისტენტთან ჩეთი"
+                  description="მიიღეთ რჩევები და პასუხები თქვენს კითხვებზე ჯანმრთელობის შესახებ"
+                  icon={<MessageCircle className="h-5 w-5" />}
+                  href="/better-me/chat"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* AI Recommendations - Now in a collapsible section */}
+          <div className={`border ${THEME.borderColor} rounded-lg overflow-hidden ${THEME.cardBg} backdrop-blur-sm ${THEME.glow}`}>
+            <div className={`bg-gradient-to-r from-gray-900/90 to-gray-800/90 px-4 py-3 border-b ${THEME.borderColor}`}>
+              <h2 className={`font-medium ${THEME.textPrimary} flex items-center`}>
+                <span className={`w-6 h-6 ${THEME.secondaryGradient} rounded-full flex items-center justify-center mr-2`}>
+                  <span className="text-white text-xs">🤖</span>
+                </span>
+                AI ჯანმრთელობის რეკომენდაციები
+              </h2>
+            </div>
+
+            <div className="p-1">
+              <Suspense fallback={<LoadingState />}>
+                <AIRecommendations healthProfileId={healthProfile.id} goals={selectedGoals} />
+              </Suspense>
             </div>
           </div>
         </div>

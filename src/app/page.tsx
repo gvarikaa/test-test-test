@@ -19,8 +19,91 @@ import {
   Loader2,
   AlertTriangle,
   Settings,
-  Filter
+  Filter,
+  Zap,
+  Brain,
+  PenSquare,
+  TrendingUp,
+  Users,
+  Stars
 } from "lucide-react";
+
+// Define animations and gradients for the enhanced dark theme
+const ANIMATIONS = {
+  fadeIn: `
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+  `,
+  fadeInUp: `
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  `,
+  shimmer: `
+    @keyframes shimmer {
+      0% {
+        background-position: -200% 0;
+      }
+      100% {
+        background-position: 200% 0;
+      }
+    }
+  `,
+  pulse: `
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.6;
+      }
+    }
+  `,
+  glow: `
+    @keyframes glow {
+      0%, 100% {
+        box-shadow: 0 0 5px 0px rgba(99, 102, 241, 0.3);
+      }
+      50% {
+        box-shadow: 0 0 20px 5px rgba(99, 102, 241, 0.6);
+      }
+    }
+  `
+};
+
+// Define theme colors for consistent styling
+const THEME = {
+  // Primary gradients
+  primaryGradient: "bg-gradient-to-r from-indigo-600 to-purple-700",
+  secondaryGradient: "bg-gradient-to-r from-violet-700 to-fuchsia-700",
+  accentGradient: "bg-gradient-to-r from-amber-600 to-orange-600",
+  successGradient: "bg-gradient-to-r from-emerald-600 to-green-700",
+  warningGradient: "bg-gradient-to-r from-amber-600 to-orange-600",
+  dangerGradient: "bg-gradient-to-r from-rose-600 to-red-700",
+
+  // Background levels
+  darkBg: "bg-gray-950",
+  cardBg: "bg-gray-900",
+  cardBgHover: "bg-gray-800/80",
+  cardBorder: "border-gray-800/40",
+
+  // Text colors
+  textPrimary: "text-gray-100",
+  textSecondary: "text-gray-400",
+  textMuted: "text-gray-500",
+
+  // Effects
+  glow: "shadow-lg shadow-indigo-950/40"
+};
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
@@ -347,7 +430,43 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-dark-bg">
+    <div className="min-h-screen bg-gray-950">
+      <style jsx global>{`
+        ${ANIMATIONS.fadeIn}
+        ${ANIMATIONS.fadeInUp}
+        ${ANIMATIONS.shimmer}
+        ${ANIMATIONS.pulse}
+        ${ANIMATIONS.glow}
+
+        .animate-fade-in {
+          animation: fadeIn 0.8s ease-out forwards;
+        }
+
+        .animate-fade-in-up {
+          animation: fadeInUp 0.6s ease-out forwards;
+        }
+
+        .animate-shimmer {
+          background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.1), transparent);
+          background-size: 200% 100%;
+          animation: shimmer 2s infinite linear;
+        }
+
+        .animate-pulse-subtle {
+          animation: pulse 2s infinite ease-in-out;
+        }
+
+        .animate-glow {
+          animation: glow 2.5s infinite ease-in-out;
+        }
+
+        .stagger-1 { animation-delay: 0.1s; }
+        .stagger-2 { animation-delay: 0.2s; }
+        .stagger-3 { animation-delay: 0.3s; }
+        .stagger-4 { animation-delay: 0.4s; }
+        .stagger-5 { animation-delay: 0.5s; }
+      `}</style>
+
       {/* ჰედერი */}
       <FacebookHeader />
 
@@ -358,6 +477,7 @@ export default function Home() {
 
         {/* შუა სვეტი - პოსტების ფიდი */}
         <main className="w-full max-w-[680px] px-0 py-4 sm:px-4">
+
           {/* სთორების სტრიპი */}
           <StoryStrip />
 
@@ -366,15 +486,20 @@ export default function Home() {
 
           {/* AI Personalization Header - Only for logged in users */}
           {session && (
-            <div className="mb-4 flex items-center justify-between bg-dark-card p-3 rounded-lg">
+            <div className={`mb-4 flex items-center justify-between p-4 rounded-xl border ${THEME.cardBorder} ${THEME.cardBg} animate-fade-in-up stagger-4`}>
               <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-blue-500" />
-                <h2 className="text-sm font-medium text-gray-200">
-                  Personalized For You
-                </h2>
+                <div className={`p-1.5 rounded-full ${THEME.primaryGradient} animate-glow`}>
+                  <Sparkles className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h2 className={`text-sm font-medium ${THEME.textPrimary}`}>
+                    Personalized For You
+                  </h2>
+                  <p className="text-xs text-gray-400">Your AI-optimized feed</p>
+                </div>
                 <button
                   onClick={() => setShowRecommendationInfo(!showRecommendationInfo)}
-                  className="text-xs text-blue-400 hover:text-blue-300 ml-2"
+                  className="text-xs text-indigo-400 hover:text-indigo-300 ml-2 hover:underline"
                 >
                   <span className="hidden sm:inline">How it works</span>
                   <span className="sm:hidden">?</span>
@@ -385,7 +510,7 @@ export default function Home() {
                 <button
                   onClick={handleRefresh}
                   disabled={isLoadingPersonalized || isLoadingStandard}
-                  className="text-xs text-gray-300 hover:text-white flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-800 disabled:opacity-50"
+                  className={`text-xs ${THEME.textPrimary} flex items-center gap-1 px-3 py-1.5 rounded-lg ${THEME.cardBgHover} border ${THEME.cardBorder} disabled:opacity-50 hover:border-indigo-800/60 transition-colors`}
                 >
                   {isLoadingPersonalized || isLoadingStandard ? (
                     <Loader2 className="w-3 h-3 animate-spin" />
@@ -398,7 +523,7 @@ export default function Home() {
                 {/* Debug Button - For testing only */}
                 <button
                   onClick={fetchDirectPosts}
-                  className="text-xs text-amber-300 hover:text-amber-100 flex items-center gap-1 px-2 py-1 rounded hover:bg-amber-800/30"
+                  className={`text-xs text-amber-300 hover:text-amber-200 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-950/30 border border-amber-900/40 hover:border-amber-700/40 transition-colors`}
                 >
                   <Settings className="w-3 h-3" />
                   <span className="hidden sm:inline">Load Direct</span>
@@ -409,42 +534,66 @@ export default function Home() {
 
           {/* Personalization Info Box */}
           {showRecommendationInfo && (
-            <div className="mb-4 p-3 bg-blue-900/20 rounded-lg border border-blue-800/50 text-sm text-blue-300">
-              <h3 className="font-medium mb-2 flex items-center gap-1">
-                <Sparkles className="w-4 h-4" />
-                How AI Personalization Works
+            <div className={`mb-4 p-4 rounded-xl bg-indigo-950/30 border border-indigo-900/50 text-sm ${THEME.textPrimary} animate-fade-in`}>
+              <h3 className="font-medium mb-3 flex items-center gap-2">
+                <div className={`p-1 rounded-full ${THEME.primaryGradient}`}>
+                  <Sparkles className="w-4 h-4 text-white" />
+                </div>
+                <span>How AI Personalization Works</span>
               </h3>
-              <p className="mb-2 text-xs">
-                Your feed is powered by AI that analyzes:
+              <p className={`mb-3 text-sm ${THEME.textSecondary}`}>
+                Your feed is intelligently curated by our AI system that analyzes:
               </p>
-              <ul className="text-xs space-y-1 list-disc pl-4 mb-2">
-                <li>Your interactions with posts, users, and content</li>
-                <li>Similarities between content you engage with</li>
-                <li>Topics and themes that match your interests</li>
-                <li>Content popular with users similar to you</li>
-              </ul>
-              <p className="text-xs">
-                Each post shows why it was recommended to help you understand your feed.
-              </p>
+              <div className="space-y-2 mb-3">
+                <div className="flex items-start gap-2">
+                  <div className="p-1 rounded-full bg-indigo-900/50 mt-0.5">
+                    <Brain className="w-3 h-3 text-indigo-300" />
+                  </div>
+                  <p className="text-xs text-gray-300">Your interactions with posts, users, and content</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="p-1 rounded-full bg-purple-900/50 mt-0.5">
+                    <Users className="w-3 h-3 text-purple-300" />
+                  </div>
+                  <p className="text-xs text-gray-300">Similarities between content you engage with</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="p-1 rounded-full bg-fuchsia-900/50 mt-0.5">
+                    <TrendingUp className="w-3 h-3 text-fuchsia-300" />
+                  </div>
+                  <p className="text-xs text-gray-300">Topics and themes that match your interests</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="p-1 rounded-full bg-blue-900/50 mt-0.5">
+                    <Stars className="w-3 h-3 text-blue-300" />
+                  </div>
+                  <p className="text-xs text-gray-300">Content popular with users similar to you</p>
+                </div>
+              </div>
+              <div className="bg-indigo-900/20 rounded-lg p-2 text-xs text-indigo-300 border border-indigo-900/30">
+                Each post shows why it was recommended to help you understand your personalized experience.
+              </div>
             </div>
           )}
 
           {/* სატესტო ღილაკები პოსტების შემოწმებისთვის */}
-          <div className="mb-4 p-3 rounded-md bg-blue-900/20 border border-blue-800/40">
-            <h3 className="text-blue-400 text-sm font-medium mb-2 flex items-center gap-1">
-              <Settings className="w-4 h-4" />
-              პოსტების ტესტი
+          <div className={`mb-4 p-4 rounded-xl bg-indigo-950/20 border ${THEME.cardBorder} animate-fade-in-up stagger-5`}>
+            <h3 className="text-indigo-300 text-sm font-medium mb-3 flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-indigo-900/50">
+                <Settings className="w-4 h-4 text-indigo-300" />
+              </div>
+              <span>პოსტების ტესტი</span>
             </h3>
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={fetchDirectPosts}
-                className="px-3 py-1.5 text-xs bg-blue-700 text-white rounded hover:bg-blue-600"
+                className={`px-3 py-1.5 text-xs ${THEME.primaryGradient} text-white rounded-lg hover:opacity-90 transition-opacity shadow-md`}
               >
                 ბაზიდან პოსტების ჩატვირთვა
               </button>
               <button
                 onClick={() => window.location.reload()}
-                className="px-3 py-1.5 text-xs bg-green-700 text-white rounded hover:bg-green-600"
+                className={`px-3 py-1.5 text-xs ${THEME.secondaryGradient} text-white rounded-lg hover:opacity-90 transition-opacity shadow-md`}
               >
                 გვერდის განახლება
               </button>
@@ -458,7 +607,7 @@ export default function Home() {
                     alert('Error seeding database: ' + data.error);
                   }
                 })}
-                className="px-3 py-1.5 text-xs bg-amber-700 text-white rounded hover:bg-amber-600"
+                className={`px-3 py-1.5 text-xs ${THEME.accentGradient} text-white rounded-lg hover:opacity-90 transition-opacity shadow-md`}
               >
                 ბაზის მონაცემების შევსება
               </button>
@@ -467,7 +616,7 @@ export default function Home() {
 
           {/* Posts feed */}
           {apiPosts && apiPosts.length > 0 && (
-            <div className="posts-feed space-y-4">
+            <div className="posts-feed space-y-4 animate-fade-in-up">
               {displayPosts}
             </div>
           )}
