@@ -134,7 +134,7 @@ export default function TokenUsageDisplay({
 
   // Download token usage stats as CSV
   const handleDownloadStats = () => {
-    if (!tokenStats) return;
+    if (!tokenStats || !tokenStats.dailyUsage) return;
 
     // Create CSV content
     let csvContent = "data:text/csv;charset=utf-8,";
@@ -202,7 +202,7 @@ export default function TokenUsageDisplay({
           ></div>
         </div>
         <span className="text-xs">
-          {usage.toLocaleString()} / {limit.toLocaleString()}
+          {usage?.toLocaleString() || '0'} / {limit?.toLocaleString() || '0'}
         </span>
       </div>
     );
@@ -232,7 +232,7 @@ export default function TokenUsageDisplay({
             {tier} Tier
           </span>
           <span className="text-sm">
-            {usage.toLocaleString()} / {limit.toLocaleString()}
+            {usage?.toLocaleString() || '0'} / {limit?.toLocaleString() || '0'}
           </span>
         </div>
         <div className="h-2.5 w-full bg-muted rounded-full overflow-hidden">
@@ -354,8 +354,8 @@ export default function TokenUsageDisplay({
 
                     {/* Simple bar chart visualization */}
                     <div className="h-32 flex items-end space-x-1">
-                      {tokenStats.dailyUsage.slice(-14).map(({ date, tokens }, i) => {
-                        const maxTokens = Math.max(...tokenStats.dailyUsage.slice(-14).map(d => d.tokens));
+                      {tokenStats?.dailyUsage?.slice(-14).map(({ date, tokens }, i) => {
+                        const maxTokens = Math.max(...(tokenStats?.dailyUsage?.slice(-14).map(d => d.tokens) || [0]));
                         const height = maxTokens > 0 ? (tokens / maxTokens * 100) : 0;
                         return (
                           <div key={date} className="flex-1 flex flex-col items-center">
@@ -388,11 +388,11 @@ export default function TokenUsageDisplay({
                       )}
                       <div className="bg-muted/40 p-2 rounded">
                         <div className="text-xs text-muted-foreground">Response time</div>
-                        <div className="text-sm font-medium">{tokenStats.averageResponseTime}ms</div>
+                        <div className="text-sm font-medium">{tokenStats?.avgResponseTime || 0}ms</div>
                       </div>
                       <div className="bg-muted/40 p-2 rounded">
                         <div className="text-xs text-muted-foreground">Success rate</div>
-                        <div className="text-sm font-medium">{tokenStats.successRate.toFixed(1)}%</div>
+                        <div className="text-sm font-medium">{tokenStats?.successRate ? tokenStats.successRate.toFixed(1) : '100'}%</div>
                       </div>
                     </div>
                   </div>
@@ -514,7 +514,7 @@ export default function TokenUsageDisplay({
                             .map(([operation, tokens]) => (
                               <div key={operation} className="grid grid-cols-2 text-xs border-b border-border/50">
                                 <div className="p-2 truncate">{operation}</div>
-                                <div className="p-2 text-right">{(tokens as number).toLocaleString()}</div>
+                                <div className="p-2 text-right">{((tokens as number) || 0).toLocaleString()}</div>
                               </div>
                             ))
                           }

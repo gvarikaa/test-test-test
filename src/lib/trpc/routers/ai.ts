@@ -285,10 +285,18 @@ export const aiRouter = router({
 
         // Check if the reset time has passed
         if (tokenLimit.resetAt < new Date()) {
-          await resetTokenUsage(userId);
-          tokenLimit = await ctx.db.aiTokenLimit.findUnique({
-            where: { userId },
-          }) || tokenLimit;
+          try {
+            await resetTokenUsage(userId);
+            const updatedLimit = await ctx.db.aITokenLimit.findUnique({
+              where: { userId },
+            });
+            if (updatedLimit) {
+              tokenLimit = updatedLimit;
+            }
+          } catch (resetError) {
+            console.error('Error during token reset:', resetError);
+            // Continue with existing token limit if reset fails
+          }
         }
 
         return {

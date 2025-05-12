@@ -267,21 +267,26 @@ export const resetTokenUsage = async (userId: string): Promise<void> => {
 
     // Log this reset for analytics
     try {
-      await db.aiTokenUsageStat.create({
-        data: {
-          tokenLimitId: tokenLimit.id,
-          operationType: 'TOKEN_RESET',
-          tokensUsed: -tokenLimit.usage, // Negative to indicate token reset
-          model: 'system',
-          endpoint: 'token-management.resetTokenUsage',
-          featureArea: 'system',
-          metadata: {
-            previousUsage: tokenLimit.usage,
-            carryOver: carryOverTokens,
-            tier: tokenLimit.tier
+      // Check if the aiTokenUsageStat model exists before attempting to use it
+      if (db.aiTokenUsageStat) {
+        await db.aiTokenUsageStat.create({
+          data: {
+            tokenLimitId: tokenLimit.id,
+            operationType: 'TOKEN_RESET',
+            tokensUsed: -tokenLimit.usage, // Negative to indicate token reset
+            model: 'system',
+            endpoint: 'token-management.resetTokenUsage',
+            featureArea: 'system',
+            metadata: {
+              previousUsage: tokenLimit.usage,
+              carryOver: carryOverTokens,
+              tier: tokenLimit.tier
+            }
           }
-        }
-      });
+        });
+      } else {
+        console.log('aiTokenUsageStat model not available, skipping log');
+      }
     } catch (statsError) {
       // Don't fail the reset operation if just the stats logging fails
       console.warn('Failed to log token reset statistics:', statsError);
@@ -450,17 +455,26 @@ export async function getTokenUsageStats(
     }
 
     // Get all token usage records for the user within the timeframe
-    const tokenUsage = await db.aiTokenUsage.findMany({
-      where: {
-        userId,
-        createdAt: {
-          gte: startDate,
-        },
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
-    });
+    let tokenUsage = [];
+    try {
+      if (db.aiTokenUsage) {
+        tokenUsage = await db.aiTokenUsage.findMany({
+          where: {
+            userId,
+            createdAt: {
+              gte: startDate,
+            },
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        });
+      } else {
+        console.log('aiTokenUsage model not available, using empty array');
+      }
+    } catch (error) {
+      console.warn('Error fetching token usage, using empty array:', error);
+    }
 
     // For admin users, also get platform-wide statistics
     let allTokenUsage = tokenUsage;
@@ -468,25 +482,39 @@ export async function getTokenUsageStats(
     let userActivity: { id: string; tokens: number; calls?: number }[] = [];
 
     // Check if the user is an admin to provide platform-wide stats
-    const isAdmin = await db.user.findFirst({
-      where: {
-        id: userId,
-        role: 'ADMIN',
-      },
-    });
+    let isAdmin = false;
+    try {
+      const adminUser = await db.user.findFirst({
+        where: {
+          id: userId,
+          role: 'ADMIN',
+        },
+      });
+      isAdmin = !!adminUser;
+    } catch (error) {
+      console.warn('Error checking if user is admin:', error);
+    }
 
     if (isAdmin) {
       // Get all usage data
-      allTokenUsage = await db.aiTokenUsage.findMany({
-        where: {
-          createdAt: {
-            gte: startDate,
-          },
-        },
-        orderBy: {
-          createdAt: 'asc',
-        },
-      });
+      try {
+        if (db.aiTokenUsage) {
+          allTokenUsage = await db.aiTokenUsage.findMany({
+            where: {
+              createdAt: {
+                gte: startDate,
+              },
+            },
+            orderBy: {
+              createdAt: 'asc',
+            },
+          });
+        } else {
+          console.log('aiTokenUsage model not available for admin stats');
+        }
+      } catch (error) {
+        console.warn('Error fetching all token usage:', error);
+      }
 
       // Count active users
       const userIds = new Set(allTokenUsage.map(record => record.userId));
