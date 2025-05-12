@@ -68,24 +68,35 @@ export default function PersonalizedFeed({
   // Get personalized feed
   const { data: recommendations, isLoading, error, refetch } =
     trpc.personalization.getPersonalizedFeed.useQuery(
-      {
+      contentType ? {
         contentType: contentType as any,
         limit
-      },
-      { staleTime: 5 * 60 * 1000 } // 5 minutes
+      } : undefined,
+      {
+        staleTime: 5 * 60 * 1000, // 5 minutes
+        retry: 3,
+        retryDelay: 1000,
+        onError: (error) => {
+          console.error("Error fetching personalized feed:", error);
+        }
+      }
     );
-  
-  // Get posts for recommendations
-  const { data: posts, isLoading: isLoadingPosts } = trpc.post.getPosts.useQuery(
-    { 
-      postIds: recommendations && contentType === 'post' 
-        ? recommendations.map(rec => rec.id) 
+
+  // Get posts for recommendations - only if using the separate post endpoint
+  // In most cases this isn't needed as we'll use the post.getAll or post.getPersonalizedFeed
+  // endpoints directly in page.tsx
+  const { data: posts, isLoading: isLoadingPosts } = trpc.post.getAll.useQuery(
+    {
+      limit,
+      postIds: recommendations && contentType === 'post'
+        ? recommendations.map(rec => rec.id)
         : [],
       includeComments: false
     },
-    { 
+    {
       enabled: Boolean(recommendations?.length && contentType === 'post'),
-      staleTime: 5 * 60 * 1000 // 5 minutes
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      retry: 2,
     }
   );
   

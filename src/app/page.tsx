@@ -40,14 +40,43 @@ export default function Home() {
     try {
       setDirectPostsLoading(true);
       const response = await fetch('/api/test/debug-posts');
+
+      // Log the raw response for debugging
+      console.log("Raw response status:", response.status);
+
+      // Check if the response is successful
+      if (!response.ok) {
+        throw new Error(`API returned status ${response.status}: ${response.statusText}`);
+      }
+
       const data = await response.json();
+      console.log("Direct API response:", data);
 
       if (data.success) {
-        console.log("Direct API posts:", data.posts);
-        setDirectPosts(data.posts);
+        // Format the posts to match UI expectations
+        const formattedPosts = data.posts.map(post => ({
+          ...post,
+          id: post.id || '',
+          content: post.content || '',
+          createdAt: post.createdAt || new Date().toISOString(),
+          user: post.user || {
+            id: '',
+            name: 'Unknown User',
+            image: 'https://ui-avatars.com/api/?name=Unknown+User&background=random&color=fff'
+          },
+          _count: post._count || {
+            reactions: 0,
+            comments: 0,
+            shares: 0
+          },
+          media: post.media || []
+        }));
+
+        console.log("Formatted direct API posts:", formattedPosts);
+        setDirectPosts(formattedPosts);
       } else {
         console.error("Error from direct API:", data.error);
-        setDirectPostsError(data.error);
+        setDirectPostsError(data.error || "Unknown error in API response");
       }
     } catch (error) {
       console.error("Error fetching direct posts:", error);
@@ -71,7 +100,18 @@ export default function Home() {
 
     // Fetch posts directly from API for debugging
     fetchDirectPosts();
-  }, []);
+
+    // Set a timeout to try refreshing data if after 3 seconds we don't have posts
+    const refreshTimer = setTimeout(() => {
+      if (apiPosts.length === 0) {
+        console.log("Still no posts after 3 seconds, trying to refresh...");
+        fetchDirectPosts();
+        handleRefresh();
+      }
+    }, 3000);
+
+    return () => clearTimeout(refreshTimer);
+  }, [apiPosts.length]);
 
   // Get personalized feed if user is authenticated and personalization is enabled
   const {
@@ -80,10 +120,17 @@ export default function Home() {
     error: personalizedError,
     refetch: refetchPersonalized
   } = api.post.getPersonalizedFeed.useQuery(
-    undefined, // Don't provide parameters for now to simplify
+    {
+      limit: 20
+    }, // Provide minimal parameters
     {
       enabled: !!session && usePersonalized && mounted,
       staleTime: 2 * 60 * 1000, // 2 minutes
+      retry: 3,
+      retryDelay: 1000,
+      onError: (error) => {
+        console.error("Error fetching personalized feed:", error);
+      }
     }
   );
 
@@ -94,10 +141,17 @@ export default function Home() {
     error: standardError,
     refetch: refetchStandard
   } = api.post.getAll.useQuery(
-    undefined, // Don't provide parameters for now to simplify
+    {
+      limit: 20
+    }, // Provide minimal parameters
     {
       enabled: mounted, // Only require mounted, not session or personalization setting
       staleTime: 2 * 60 * 1000, // 2 minutes
+      retry: 3,
+      retryDelay: 1000,
+      onError: (error) => {
+        console.error("Error fetching standard posts:", error);
+      }
     }
   );
 
@@ -153,12 +207,20 @@ export default function Home() {
     }
 
     // Update apiPosts state for use throughout the component
-    // Always prefer personalized data if available
+    // Always prefer personalized data if available, then standard data, then direct posts
     const postsFromApi = personalizedData?.posts || standardData?.posts || [];
 
-    setApiPosts(postsFromApi);
+    // ყოველთვის ვიყენებთ პირდაპირი API-ს პოსტებს (ტესტისთვის)
+    console.log("Always using direct API posts for testing");
+    if (directPosts.length > 0) {
+      setApiPosts(directPosts);
+    } else if (postsFromApi.length > 0) {
+      setApiPosts(postsFromApi);
+    } else {
+      console.log("No posts available from any source");
+    }
 
-  }, [standardData, personalizedData, mounted, usePersonalized]);
+  }, [standardData, personalizedData, mounted, usePersonalized, directPosts]);
 
   // Display logic for posts feed
   const displayPosts = (() => {
@@ -259,14 +321,19 @@ export default function Home() {
 
             <Post
               post={{
-                id: post?.id,
-                user: post?.user,
-                content: post?.content,
+                id: post?.id || '',
+                user: post?.user || {
+                  id: '',
+                  name: 'Unknown User',
+                  image: 'https://ui-avatars.com/api/?name=Unknown+User&background=random&color=fff'
+                },
+                content: post?.content || '',
+                formattedContent: post?.formattedContent,
                 images: post?.media?.map(m => m.url) || [],
-                createdAt: post?.createdAt,
+                createdAt: post?.createdAt || new Date().toISOString(),
                 likes: post?._count?.reactions || 0,
                 comments: post?._count?.comments || 0,
-                shares: 0,
+                shares: post?._count?.shares || 0,
               }}
             />
           </div>
@@ -327,6 +394,15 @@ export default function Home() {
                   )}
                   <span className="hidden sm:inline">Refresh</span>
                 </button>
+
+                {/* Debug Button - For testing only */}
+                <button
+                  onClick={fetchDirectPosts}
+                  className="text-xs text-amber-300 hover:text-amber-100 flex items-center gap-1 px-2 py-1 rounded hover:bg-amber-800/30"
+                >
+                  <Settings className="w-3 h-3" />
+                  <span className="hidden sm:inline">Load Direct</span>
+                </button>
               </div>
             </div>
           )}
@@ -353,132 +429,41 @@ export default function Home() {
             </div>
           )}
 
-          {/* დევ რეჟიმში - დამალულია საბოლოო ვერსიაში */}
-          {process.env.NODE_ENV === 'development' && (
-            <>
-              {/* Database status display */}
-              {directPostsLoading ? (
-                <div className="p-4 mb-4 bg-blue-900/20 border border-blue-800 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
-                    <h3 className="font-medium text-blue-400">Fetching posts directly from database...</h3>
-                  </div>
-                </div>
-              ) : directPostsError ? (
-                <div className="p-4 mb-4 bg-red-900/20 border border-red-800 rounded-lg">
-                  <h3 className="font-medium text-red-400 mb-2 flex items-center gap-2">
-                    <AlertTriangle className="h-5 w-5" />
-                    Database Connection Error
-                  </h3>
-                  <p className="text-sm text-red-300">{directPostsError}</p>
-                  <button
-                    onClick={fetchDirectPosts}
-                    className="mt-2 px-3 py-1 bg-red-700 text-white text-sm rounded hover:bg-red-600"
-                  >
-                    Try Again
-                  </button>
-                </div>
-              ) : directPosts.length > 0 && (!apiPosts || apiPosts.length === 0) ? (
-                <div className="mb-4 p-4 bg-green-900/20 border border-green-800 rounded-lg">
-                  <h3 className="font-medium text-green-400 mb-2 flex items-center gap-2">
-                    <AlertTriangle className="h-5 w-5" />
-                    API Connection Issue
-                  </h3>
-                  <p className="text-sm text-green-300">
-                    Posts exist in database but aren't being returned through the API.
-                    This might indicate a connection issue.
-                  </p>
-                  <button
-                    onClick={handleRefresh}
-                    className="mt-2 px-3 py-1 bg-green-700 text-white text-sm rounded hover:bg-green-600"
-                  >
-                    Retry API Connection
-                  </button>
-                </div>
-              ) : directPosts.length === 0 && (
-                <div className="p-4 mb-4 bg-amber-900/20 border border-amber-800 rounded-lg">
-                  <h3 className="font-medium text-amber-400 mb-2 flex items-center gap-2">
-                    <AlertTriangle className="h-5 w-5" />
-                    No posts found in database
-                  </h3>
-                  <p className="text-sm text-amber-300">
-                    There appear to be no posts in the database. Try seeding the database or creating some posts.
-                  </p>
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      onClick={fetchDirectPosts}
-                      className="px-3 py-1 bg-amber-700 text-white text-sm rounded hover:bg-amber-600"
-                    >
-                      Check Database
-                    </button>
-                    <button
-                      onClick={() => fetch('/api/test/seed-database').then(res => res.json()).then(data => {
-                        console.log('Seed result:', data);
-                        if (data.success) {
-                          alert('Database seeded successfully! Refreshing...');
-                          fetchDirectPosts();
-                        } else {
-                          alert('Error seeding database: ' + data.error);
-                        }
-                      })}
-                      className="px-3 py-1 bg-green-700 text-white text-sm rounded hover:bg-green-600"
-                    >
-                      Seed Database
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Tools for debugging posts */}
-              <div className="mb-4 p-4 bg-indigo-900/20 border border-indigo-800 rounded-lg">
-                <h3 className="font-medium text-indigo-400 mb-2">
-                  Developer Tools
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={fetchDirectPosts}
-                    className="px-3 py-1 bg-indigo-700 text-white text-sm rounded hover:bg-indigo-600"
-                  >
-                    Check Database
-                  </button>
-                  <button
-                    onClick={() => fetch('/api/test/fix-image-urls').then(res => res.json()).then(data => {
-                      console.log('Image fix result:', data);
-                      if (data.success) {
-                        alert('Image URLs fixed successfully! Refreshing...');
-                        fetchDirectPosts();
-                      } else {
-                        alert('Error fixing image URLs: ' + data.error);
-                      }
-                    })}
-                    className="px-3 py-1 bg-blue-700 text-white text-sm rounded hover:bg-blue-600"
-                  >
-                    Fix Image Links
-                  </button>
-                  <button
-                    onClick={() => fetch('/api/test/seed-database').then(res => res.json()).then(data => {
-                      console.log('Seed result:', data);
-                      if (data.success) {
-                        alert('Database seeded successfully! Refreshing...');
-                        fetchDirectPosts();
-                      } else {
-                        alert('Error seeding database: ' + data.error);
-                      }
-                    })}
-                    className="px-3 py-1 bg-green-700 text-white text-sm rounded hover:bg-green-600"
-                  >
-                    Seed Test Posts
-                  </button>
-                  <button
-                    onClick={handleRefresh}
-                    className="px-3 py-1 bg-purple-700 text-white text-sm rounded hover:bg-purple-600"
-                  >
-                    Refresh Feed
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
+          {/* სატესტო ღილაკები პოსტების შემოწმებისთვის */}
+          <div className="mb-4 p-3 rounded-md bg-blue-900/20 border border-blue-800/40">
+            <h3 className="text-blue-400 text-sm font-medium mb-2 flex items-center gap-1">
+              <Settings className="w-4 h-4" />
+              პოსტების ტესტი
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={fetchDirectPosts}
+                className="px-3 py-1.5 text-xs bg-blue-700 text-white rounded hover:bg-blue-600"
+              >
+                ბაზიდან პოსტების ჩატვირთვა
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-3 py-1.5 text-xs bg-green-700 text-white rounded hover:bg-green-600"
+              >
+                გვერდის განახლება
+              </button>
+              <button
+                onClick={() => fetch('/api/test/seed-database').then(res => res.json()).then(data => {
+                  console.log('Seed result:', data);
+                  if (data.success) {
+                    alert('Database seeded successfully! Refreshing...');
+                    fetchDirectPosts();
+                  } else {
+                    alert('Error seeding database: ' + data.error);
+                  }
+                })}
+                className="px-3 py-1.5 text-xs bg-amber-700 text-white rounded hover:bg-amber-600"
+              >
+                ბაზის მონაცემების შევსება
+              </button>
+            </div>
+          </div>
 
           {/* Posts feed */}
           {apiPosts && apiPosts.length > 0 && (

@@ -33,13 +33,25 @@ export class BunnyStorageProvider implements StorageProvider {
    * Upload a file to Bunny CDN
    */
   async uploadFile(
-    file: File | Blob | Buffer | Uint8Array,
+    file: any, // Changed from specific types to any to handle server-side
     path: string = "/uploads",
     metadata?: FileMetadata
   ): Promise<UploadResult> {
     try {
-      // Create a unique filename
-      const filename = file instanceof File ? file.name : "blob.bin";
+      // Check if we are in browser environment
+      const isBrowser = typeof window !== 'undefined';
+
+      // Create a unique filename - safely check for File object
+      let filename = "blob.bin";
+
+      // Only check instanceof File if browser environment with File available
+      if (isBrowser && typeof File !== 'undefined' && file instanceof File) {
+        filename = file.name;
+      } else if (file.name) {
+        // Fallback if file has a name property but is not a File instance
+        filename = file.name;
+      }
+
       const uniqueFilename = this.generateUniqueFilename(filename);
       const uploadPath = `${path}/${uniqueFilename}`;
 
@@ -49,33 +61,54 @@ export class BunnyStorageProvider implements StorageProvider {
         uint8Array = file;
       } else if (Buffer.isBuffer(file)) {
         uint8Array = new Uint8Array(file);
-      } else {
-        // File or Blob
+      } else if (file.arrayBuffer) {
+        // File or Blob - make sure arrayBuffer exists before calling
         const buffer = await file.arrayBuffer();
         uint8Array = new Uint8Array(buffer);
+      } else {
+        // Last resort fallback - try to convert to buffer somehow
+        console.log('File type not recognized, attempting fallback conversion');
+        if (Buffer.isBuffer(file.buffer)) {
+          uint8Array = new Uint8Array(file.buffer);
+        } else {
+          throw new Error("Unsupported file type - cannot convert to Uint8Array");
+        }
       }
 
       // Prepare metadata
-      const contentType = metadata?.contentType || 
-        (file instanceof File ? file.type : "application/octet-stream");
-      
+      let contentType = metadata?.contentType;
+      if (!contentType) {
+        if (isBrowser && typeof File !== 'undefined' && file instanceof File) {
+          contentType = file.type;
+        } else if (file.type) {
+          contentType = file.type;
+        } else {
+          contentType = "application/octet-stream";
+        }
+      }
+
       const uploadMetadata = {
         'Content-Type': contentType,
         ...metadata,
       };
 
+      console.log('Bunny upload attempt:', {
+        path: uploadPath,
+        contentType,
+        cdnDomain: this.cdnDomain,
+        fileSize: uint8Array.length
+      });
+
       // Upload to Bunny CDN
-      await this.bunnyStorage.upload(uploadPath, uint8Array, uploadMetadata);
+      const uploadResult = await this.bunnyStorage.upload(uploadPath, uint8Array, uploadMetadata);
+      console.log('Bunny upload result:', uploadResult);
 
       // Generate the URL
       const url = `https://${this.cdnDomain}${uploadPath}`;
 
       // Generate thumbnail URL for videos
       let thumbnailUrl: string | undefined = undefined;
-      if (
-        (file instanceof File && file.type.startsWith('video/')) ||
-        contentType.startsWith('video/')
-      ) {
+      if (contentType.startsWith('video/')) {
         thumbnailUrl = `${url}?thumbnail=true`;
       }
 

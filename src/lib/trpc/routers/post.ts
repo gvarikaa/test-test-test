@@ -12,67 +12,29 @@ export const postRouter = router({
         personalized: z.boolean().optional().default(false),
         type: z.enum(['TEXT', 'PHOTO', 'VIDEO', 'LINK', 'POLL', 'AUDIO', 'DOCUMENT']).optional(),
         hashtag: z.string().optional(),
+        postIds: z.array(z.string()).optional(), // Optional array of specific post IDs to fetch
+        includeComments: z.boolean().optional().default(false),
       }).optional()
     )
     .query(async ({ ctx, input }) => {
-      const limit = input?.limit ?? 10;
-      const cursor = input?.cursor;
-      const personalized = input?.personalized ?? false;
-      const postType = input?.type;
-      const hashtag = input?.hashtag;
-      const userId = ctx.session?.user?.id;
+      try {
+        const limit = input?.limit ?? 10;
+        const cursor = input?.cursor;
+        const personalized = input?.personalized ?? false;
+        const postType = input?.type;
+        const hashtag = input?.hashtag;
+        const userId = ctx.session?.user?.id;
+        const specificPostIds = input?.postIds;
+        const includeComments = input?.includeComments ?? false;
 
-      // If user is logged in and wants personalized content, use personalization system
-      if (personalized && userId) {
-        try {
-          // Import the personalization function
-          const { generatePersonalizedFeed, ContentType } = await import('@/lib/personalization');
-
-          // Get personalized content IDs with scores and reasons
-          const recommendations = await generatePersonalizedFeed(
-            userId,
-            ContentType.POST,
-            limit + (cursor ? 1 : 0) // Add one extra if we have a cursor
-          );
-
-          // Extract just the IDs, preserving order
-          let postIds = recommendations.map(rec => rec.id);
-
-          // Apply cursor if provided
-          if (cursor) {
-            const cursorIndex = postIds.indexOf(cursor);
-            if (cursorIndex !== -1) {
-              postIds = postIds.slice(cursorIndex + 1);
-            }
-          }
-
-          // Build where clause with additional filters
-          const whereClause: any = {
-            id: {
-              in: postIds,
-            },
-            published: true,
-          };
-
-          // Apply type filter if provided
-          if (postType) {
-            whereClause.type = postType;
-          }
-
-          // Apply hashtag filter if provided
-          if (hashtag) {
-            whereClause.hashtags = {
-              some: {
-                topic: {
-                  name: hashtag.toLowerCase(),
-                },
-              },
-            };
-          }
-
-          // Fetch the actual posts
+        // If specific post IDs are provided, fetch only those
+        if (specificPostIds && specificPostIds.length > 0) {
           const posts = await ctx.db.post.findMany({
-            where: whereClause,
+            where: {
+              id: { in: specificPostIds },
+              published: true,
+              ...(postType ? { type: postType } : {}),
+            },
             include: {
               user: {
                 select: {
@@ -106,6 +68,27 @@ export const postRouter = router({
               },
               audioRecordings: true,
               urlPreviews: true,
+              comments: includeComments ? {
+                where: { parentId: null },
+                take: 3,
+                orderBy: { createdAt: 'desc' },
+                include: {
+                  user: {
+                    select: {
+                      id: true,
+                      name: true,
+                      username: true,
+                      image: true,
+                    },
+                  },
+                  _count: {
+                    select: {
+                      reactions: true,
+                      replies: true,
+                    },
+                  },
+                },
+              } : undefined,
               _count: {
                 select: {
                   reactions: true,
@@ -143,175 +126,373 @@ export const postRouter = router({
                 take: 1,
               } : undefined,
             },
-          });
-
-          // Re-sort to match the original recommendation order
-          const sortedPosts = postIds
-            .map(id => posts.find(post => post.id === id))
-            .filter(Boolean);
-
-          // Determine next cursor
-          let nextCursor: typeof cursor = undefined;
-          if (sortedPosts.length > 0 && recommendations.length > postIds.length) {
-            nextCursor = sortedPosts[sortedPosts.length - 1]?.id;
-          }
-
-          // Add recommendation metadata to each post
-          const postsWithRecommendationData = sortedPosts.map(post => {
-            const recommendation = recommendations.find(rec => rec.id === post?.id);
-            return {
-              ...post,
-              recommendationMetadata: recommendation ? {
-                reason: recommendation.reason,
-                source: recommendation.source,
-                score: recommendation.score,
-                explanation: recommendation.metadata?.explanation,
-              } : null,
-            };
+          }).catch(error => {
+            console.error('Error fetching specific posts:', error);
+            return []; // Return empty array on error
           });
 
           return {
-            posts: postsWithRecommendationData,
-            nextCursor,
+            posts,
+            nextCursor: undefined,
           };
-        } catch (error) {
-          console.error('Error fetching personalized posts:', error);
-          // Fall back to standard feed if personalization fails
         }
-      }
 
-      // Standard non-personalized feed or fallback
-      // Build the where clause
-      const whereClause: any = {
-        published: true,
-        OR: [
-          { visibility: Visibility.PUBLIC },
-          userId ? {
-            visibility: Visibility.FRIENDS,
-            user: {
-              friends: {
-                some: {
-                  friendId: userId,
-                  status: 'ACCEPTED',
+        // If user is logged in and wants personalized content, use personalization system
+        if (personalized && userId) {
+          try {
+            // Import the personalization function
+            const { generatePersonalizedFeed, ContentType } = await import('@/lib/personalization');
+
+            // Get personalized content IDs with scores and reasons
+            const recommendations = await generatePersonalizedFeed(
+              userId,
+              ContentType.POST,
+              limit + (cursor ? 1 : 0) // Add one extra if we have a cursor
+            ).catch(error => {
+              console.error('Error in generatePersonalizedFeed:', error);
+              return []; // Return empty array to trigger fallback
+            });
+
+            // If recommendations were returned successfully
+            if (recommendations && recommendations.length > 0) {
+              // Extract just the IDs, preserving order
+              let postIds = recommendations.map(rec => rec.id);
+
+              // Apply cursor if provided
+              if (cursor) {
+                const cursorIndex = postIds.indexOf(cursor);
+                if (cursorIndex !== -1) {
+                  postIds = postIds.slice(cursorIndex + 1);
+                }
+              }
+
+              // Build where clause with additional filters
+              const whereClause: any = {
+                id: {
+                  in: postIds,
                 },
-              },
-            },
-          } : {},
-          userId ? { userId } : {},
-        ],
-      };
+                published: true,
+              };
 
-      // Apply type filter if provided
-      if (postType) {
-        whereClause.type = postType;
-      }
+              // Apply type filter if provided
+              if (postType) {
+                whereClause.type = postType;
+              }
 
-      // Apply hashtag filter if provided
-      if (hashtag) {
-        whereClause.hashtags = {
-          some: {
-            topic: {
-              name: hashtag.toLowerCase(),
-            },
-          },
-        };
-      }
+              // Apply hashtag filter if provided
+              if (hashtag) {
+                whereClause.hashtags = {
+                  some: {
+                    topic: {
+                      name: hashtag.toLowerCase(),
+                    },
+                  },
+                };
+              }
 
-      // If a cursor is provided, only fetch posts created after the cursor
-      if (cursor) {
-        whereClause.id = {
-          lt: cursor,
-        };
-      }
-
-      const posts = await ctx.db.post.findMany({
-        take: limit + 1, // Fetch one extra to determine if there are more
-        where: whereClause,
-        orderBy: {
-          createdAt: 'desc',
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              username: true,
-              image: true,
-            },
-          },
-          media: true,
-          poll: {
-            include: {
-              options: {
+              // Fetch the actual posts
+              const posts = await ctx.db.post.findMany({
+                where: whereClause,
                 include: {
+                  user: {
+                    select: {
+                      id: true,
+                      name: true,
+                      username: true,
+                      image: true,
+                    },
+                  },
+                  media: true,
+                  poll: {
+                    include: {
+                      options: {
+                        include: {
+                          _count: {
+                            select: {
+                              votes: true,
+                            }
+                          },
+                          votes: userId ? {
+                            where: {
+                              userId,
+                            },
+                            select: {
+                              id: true,
+                            },
+                          } : undefined,
+                        },
+                      },
+                    },
+                  },
+                  audioRecordings: true,
+                  urlPreviews: true,
+                  comments: includeComments ? {
+                    where: { parentId: null },
+                    take: 3,
+                    orderBy: { createdAt: 'desc' },
+                    include: {
+                      user: {
+                        select: {
+                          id: true,
+                          name: true,
+                          username: true,
+                          image: true,
+                        },
+                      },
+                      _count: {
+                        select: {
+                          reactions: true,
+                          replies: true,
+                        },
+                      },
+                    },
+                  } : undefined,
                   _count: {
                     select: {
-                      votes: true,
-                    }
+                      reactions: true,
+                      comments: true,
+                      shares: true,
+                      views: true,
+                    },
                   },
-                  votes: userId ? {
+                  aiAnalysis: {
+                    select: {
+                      id: true,
+                      sentiment: true,
+                      topics: true,
+                    },
+                  },
+                  mentions: {
+                    include: {
+                      user: {
+                        select: {
+                          id: true,
+                          name: true,
+                          username: true,
+                          image: true,
+                        },
+                      },
+                    },
+                  },
+                  reactions: userId ? {
                     where: {
                       userId,
                     },
                     select: {
-                      id: true,
+                      type: true,
                     },
+                    take: 1,
                   } : undefined,
                 },
+              }).catch(error => {
+                console.error('Error fetching personalized posts:', error);
+                return []; // Return empty array to trigger fallback
+              });
+
+              // If posts were found, return them
+              if (posts && posts.length > 0) {
+                // Re-sort to match the original recommendation order
+                const sortedPosts = postIds
+                  .map(id => posts.find(post => post.id === id))
+                  .filter(Boolean);
+
+                // Determine next cursor
+                let nextCursor: typeof cursor = undefined;
+                if (sortedPosts.length > 0 && recommendations.length > postIds.length) {
+                  nextCursor = sortedPosts[sortedPosts.length - 1]?.id;
+                }
+
+                // Add recommendation metadata to each post
+                const postsWithRecommendationData = sortedPosts.map(post => {
+                  const recommendation = recommendations.find(rec => rec.id === post?.id);
+                  return {
+                    ...post,
+                    recommendationMetadata: recommendation ? {
+                      reason: recommendation.reason,
+                      source: recommendation.source,
+                      score: recommendation.score,
+                      explanation: recommendation.metadata?.explanation,
+                    } : null,
+                  };
+                });
+
+                return {
+                  posts: postsWithRecommendationData,
+                  nextCursor,
+                };
+              }
+            }
+            // If we reach here, personalization failed or returned no results, fall back to standard feed
+          } catch (error) {
+            console.error('Error fetching personalized posts:', error);
+            // Fall back to standard feed if personalization fails
+          }
+        }
+
+        // Standard non-personalized feed or fallback
+        // Build the where clause
+        const whereClause: any = {
+          published: true,
+          OR: [
+            { visibility: Visibility.PUBLIC },
+            userId ? {
+              visibility: Visibility.FRIENDS,
+              user: {
+                friends: {
+                  some: {
+                    friendId: userId,
+                    status: 'ACCEPTED',
+                  },
+                },
+              },
+            } : {},
+            userId ? { userId } : {},
+          ],
+        };
+
+        // Apply type filter if provided
+        if (postType) {
+          whereClause.type = postType;
+        }
+
+        // Apply hashtag filter if provided
+        if (hashtag) {
+          whereClause.hashtags = {
+            some: {
+              topic: {
+                name: hashtag.toLowerCase(),
               },
             },
+          };
+        }
+
+        // If a cursor is provided, only fetch posts created after the cursor
+        if (cursor) {
+          whereClause.id = {
+            lt: cursor,
+          };
+        }
+
+        const posts = await ctx.db.post.findMany({
+          take: limit + 1, // Fetch one extra to determine if there are more
+          where: whereClause,
+          orderBy: {
+            createdAt: 'desc',
           },
-          audioRecordings: true,
-          urlPreviews: true,
-          _count: {
-            select: {
-              reactions: true,
-              comments: true,
-              shares: true,
-              views: true,
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                image: true,
+              },
             },
-          },
-          aiAnalysis: {
-            select: {
-              id: true,
-              sentiment: true,
-              topics: true,
-            },
-          },
-          mentions: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  name: true,
-                  username: true,
-                  image: true,
+            media: true,
+            poll: {
+              include: {
+                options: {
+                  include: {
+                    _count: {
+                      select: {
+                        votes: true,
+                      }
+                    },
+                    votes: userId ? {
+                      where: {
+                        userId,
+                      },
+                      select: {
+                        id: true,
+                      },
+                    } : undefined,
+                  },
                 },
               },
             },
+            audioRecordings: true,
+            urlPreviews: true,
+            comments: includeComments ? {
+              where: { parentId: null },
+              take: 3,
+              orderBy: { createdAt: 'desc' },
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    username: true,
+                    image: true,
+                  },
+                },
+                _count: {
+                  select: {
+                    reactions: true,
+                    replies: true,
+                  },
+                },
+              },
+            } : undefined,
+            _count: {
+              select: {
+                reactions: true,
+                comments: true,
+                shares: true,
+                views: true,
+              },
+            },
+            aiAnalysis: {
+              select: {
+                id: true,
+                sentiment: true,
+                topics: true,
+              },
+            },
+            mentions: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    username: true,
+                    image: true,
+                  },
+                },
+              },
+            },
+            reactions: userId ? {
+              where: {
+                userId,
+              },
+              select: {
+                type: true,
+              },
+              take: 1,
+            } : undefined,
           },
-          reactions: userId ? {
-            where: {
-              userId,
-            },
-            select: {
-              type: true,
-            },
-            take: 1,
-          } : undefined,
-        },
-      });
+        }).catch(error => {
+          console.error('Error fetching standard posts:', error);
+          return []; // Return empty array on error
+        });
 
-      let nextCursor: typeof cursor = undefined;
-      if (posts.length > limit) {
-        const nextItem = posts.pop();
-        nextCursor = nextItem!.id;
+        let nextCursor: typeof cursor = undefined;
+        if (posts.length > limit) {
+          const nextItem = posts.pop();
+          nextCursor = nextItem!.id;
+        }
+
+        return {
+          posts,
+          nextCursor,
+        };
+      } catch (error) {
+        // Catch-all error handler, returns empty array instead of throwing
+        console.error('Error in getAll:', error);
+        return {
+          posts: [],
+          nextCursor: undefined,
+        };
       }
-
-      return {
-        posts,
-        nextCursor,
-      };
     }),
 
   getById: publicProcedure
@@ -1065,6 +1246,7 @@ export const postRouter = router({
         cursor: z.string().nullish(),
         includeReasons: z.boolean().optional().default(true),
         type: z.enum(['TEXT', 'PHOTO', 'VIDEO', 'LINK', 'POLL', 'AUDIO', 'DOCUMENT']).optional(),
+        postIds: z.array(z.string()).optional(), // Allow specifying post IDs directly
       }).optional()
     )
     .query(async ({ ctx, input }) => {
@@ -1073,8 +1255,103 @@ export const postRouter = router({
       const includeReasons = input?.includeReasons ?? true;
       const postType = input?.type;
       const userId = ctx.session.user.id;
+      const directPostIds = input?.postIds;
 
       try {
+        // If we have direct post IDs, skip personalization and fetch those posts
+        if (directPostIds && directPostIds.length > 0) {
+          const posts = await ctx.db.post.findMany({
+            where: {
+              id: { in: directPostIds },
+              published: true,
+              ...(postType ? { type: postType } : {})
+            },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                  image: true,
+                },
+              },
+              media: true,
+              poll: {
+                include: {
+                  options: {
+                    include: {
+                      _count: {
+                        select: {
+                          votes: true,
+                        }
+                      },
+                      votes: {
+                        where: {
+                          userId,
+                        },
+                        select: {
+                          id: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              audioRecordings: true,
+              urlPreviews: true,
+              _count: {
+                select: {
+                  reactions: true,
+                  comments: true,
+                  shares: true,
+                  views: true,
+                },
+              },
+              aiAnalysis: {
+                select: {
+                  id: true,
+                  sentiment: true,
+                  topics: true,
+                  suggestions: true,
+                },
+              },
+              mentions: {
+                include: {
+                  user: {
+                    select: {
+                      id: true,
+                      name: true,
+                      username: true,
+                      image: true,
+                    },
+                  },
+                },
+              },
+              reactions: {
+                where: {
+                  userId,
+                },
+                select: {
+                  type: true,
+                },
+                take: 1,
+              },
+            },
+          });
+
+          return {
+            posts: posts.map(post => ({
+              ...post,
+              recommendationMetadata: includeReasons ? {
+                reason: "Selected content",
+                source: "direct",
+                score: 1.0,
+              } : undefined,
+            })),
+            nextCursor: undefined,
+          };
+        }
+
         // Import the personalization function
         const { generatePersonalizedFeed, ContentType, UserBehaviorType, logUserBehavior } = await import('@/lib/personalization');
 
@@ -1083,7 +1360,141 @@ export const postRouter = router({
           userId,
           ContentType.POST,
           limit + (cursor ? 1 : 0) // Add one extra if we have a cursor
-        );
+        ).catch(error => {
+          console.error('Error in generatePersonalizedFeed:', error);
+          return []; // Return empty array to continue with fallback
+        });
+
+        // If no recommendations or an error occurred, use fallback
+        if (!recommendations || recommendations.length === 0) {
+          // Fallback to standard feed if personalization fails
+          const whereClause: any = {
+            published: true,
+            OR: [
+              { visibility: Visibility.PUBLIC },
+              {
+                visibility: Visibility.FRIENDS,
+                user: {
+                  friends: {
+                    some: {
+                      friendId: userId,
+                      status: 'ACCEPTED',
+                    },
+                  },
+                },
+              },
+              { userId },
+            ],
+          };
+
+          // Apply type filter if provided
+          if (postType) {
+            whereClause.type = postType;
+          }
+
+          // Apply cursor if provided
+          if (cursor) {
+            whereClause.id = {
+              lt: cursor,
+            };
+          }
+
+          const posts = await ctx.db.post.findMany({
+            take: limit + 1,
+            where: whereClause,
+            orderBy: {
+              createdAt: 'desc',
+            },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                  image: true,
+                },
+              },
+              media: true,
+              poll: {
+                include: {
+                  options: {
+                    include: {
+                      _count: {
+                        select: {
+                          votes: true,
+                        }
+                      },
+                      votes: {
+                        where: {
+                          userId,
+                        },
+                        select: {
+                          id: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              audioRecordings: true,
+              urlPreviews: true,
+              _count: {
+                select: {
+                  reactions: true,
+                  comments: true,
+                  shares: true,
+                  views: true,
+                },
+              },
+              aiAnalysis: {
+                select: {
+                  id: true,
+                  sentiment: true,
+                  topics: true,
+                },
+              },
+              mentions: {
+                include: {
+                  user: {
+                    select: {
+                      id: true,
+                      name: true,
+                      username: true,
+                      image: true,
+                    },
+                  },
+                },
+              },
+              reactions: {
+                where: {
+                  userId,
+                },
+                select: {
+                  type: true,
+                },
+                take: 1,
+              },
+            },
+          });
+
+          let nextCursor: typeof cursor = undefined;
+          if (posts.length > limit) {
+            const nextItem = posts.pop();
+            nextCursor = nextItem!.id;
+          }
+
+          return {
+            posts: posts.map(post => ({
+              ...post,
+              recommendationMetadata: includeReasons ? {
+                reason: "Recent post",
+                source: "recency",
+                score: 0.9,
+              } : undefined,
+            })),
+            nextCursor,
+          };
+        }
 
         // Extract just the IDs, preserving order
         let postIds = recommendations.map(rec => rec.id);
@@ -1183,7 +1594,112 @@ export const postRouter = router({
               take: 1,
             },
           },
+        }).catch(error => {
+          console.error('Error fetching personalized posts:', error);
+          return []; // Return empty array to trigger the fallback below
         });
+
+        // If no posts were found but we had recommendations, fall back to standard feed
+        if (posts.length === 0) {
+          const standardPosts = await ctx.db.post.findMany({
+            take: limit + 1,
+            where: {
+              published: true,
+              ...(postType ? { type: postType } : {})
+            },
+            orderBy: {
+              createdAt: 'desc',
+            },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                  image: true,
+                },
+              },
+              media: true,
+              poll: {
+                include: {
+                  options: {
+                    include: {
+                      _count: {
+                        select: {
+                          votes: true,
+                        }
+                      },
+                      votes: {
+                        where: {
+                          userId,
+                        },
+                        select: {
+                          id: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              audioRecordings: true,
+              urlPreviews: true,
+              _count: {
+                select: {
+                  reactions: true,
+                  comments: true,
+                  shares: true,
+                  views: true,
+                },
+              },
+              aiAnalysis: {
+                select: {
+                  id: true,
+                  sentiment: true,
+                  topics: true,
+                },
+              },
+              mentions: {
+                include: {
+                  user: {
+                    select: {
+                      id: true,
+                      name: true,
+                      username: true,
+                      image: true,
+                    },
+                  },
+                },
+              },
+              reactions: {
+                where: {
+                  userId,
+                },
+                select: {
+                  type: true,
+                },
+                take: 1,
+              },
+            },
+          });
+
+          let nextCursor: typeof cursor = undefined;
+          if (standardPosts.length > limit) {
+            const nextItem = standardPosts.pop();
+            nextCursor = nextItem!.id;
+          }
+
+          return {
+            posts: standardPosts.map(post => ({
+              ...post,
+              recommendationMetadata: includeReasons ? {
+                reason: "Recent post",
+                source: "recency",
+                score: 0.9,
+              } : undefined,
+            })),
+            nextCursor,
+          };
+        }
 
         // Re-sort to match the original recommendation order
         const sortedPosts = postIds
@@ -1216,17 +1732,22 @@ export const postRouter = router({
         });
 
         // Log user behavior for viewing feed
-        logUserBehavior(
-          userId,
-          UserBehaviorType.VIEW,
-          'feed',
-          ContentType.POST,
-          {
-            timestamp: new Date(),
-            recommendationCount: result.length,
-            sources: [...new Set(recommendations.map(rec => rec.source))],
-          }
-        ).catch(e => console.error('Error logging feed view:', e));
+        try {
+          await logUserBehavior(
+            userId,
+            UserBehaviorType.VIEW,
+            'feed',
+            ContentType.POST,
+            {
+              timestamp: new Date(),
+              recommendationCount: result.length,
+              sources: [...new Set(recommendations.map(rec => rec.source))],
+            }
+          );
+        } catch (e) {
+          console.error('Error logging feed view:', e);
+          // Continue without interrupting the request
+        }
 
         return {
           posts: result,
@@ -1234,133 +1755,11 @@ export const postRouter = router({
         };
       } catch (error) {
         console.error('Error fetching personalized feed:', error);
-        
-        // Fallback to standard feed if personalization fails
-        const whereClause: any = {
-          published: true,
-          OR: [
-            { visibility: Visibility.PUBLIC },
-            {
-              visibility: Visibility.FRIENDS,
-              user: {
-                friends: {
-                  some: {
-                    friendId: userId,
-                    status: 'ACCEPTED',
-                  },
-                },
-              },
-            },
-            { userId },
-          ],
-        };
 
-        // Apply type filter if provided
-        if (postType) {
-          whereClause.type = postType;
-        }
-
-        // Apply cursor if provided
-        if (cursor) {
-          whereClause.id = {
-            lt: cursor,
-          };
-        }
-
-        const posts = await ctx.db.post.findMany({
-          take: limit + 1,
-          where: whereClause,
-          orderBy: {
-            createdAt: 'desc',
-          },
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                username: true,
-                image: true,
-              },
-            },
-            media: true,
-            poll: {
-              include: {
-                options: {
-                  include: {
-                    _count: {
-                      select: {
-                        votes: true,
-                      }
-                    },
-                    votes: {
-                      where: {
-                        userId,
-                      },
-                      select: {
-                        id: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-            audioRecordings: true,
-            urlPreviews: true,
-            _count: {
-              select: {
-                reactions: true,
-                comments: true,
-                shares: true,
-                views: true,
-              },
-            },
-            aiAnalysis: {
-              select: {
-                id: true,
-                sentiment: true,
-                topics: true,
-              },
-            },
-            mentions: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    name: true,
-                    username: true,
-                    image: true,
-                  },
-                },
-              },
-            },
-            reactions: {
-              where: {
-                userId,
-              },
-              select: {
-                type: true,
-              },
-              take: 1,
-            },
-          },
-        });
-
-        let nextCursor: typeof cursor = undefined;
-        if (posts.length > limit) {
-          const nextItem = posts.pop();
-          nextCursor = nextItem!.id;
-        }
-
+        // Final fallback - just return an empty result rather than throwing an error
         return {
-          posts: posts.map(post => ({
-            ...post,
-            recommendationMetadata: includeReasons ? {
-              reason: "Recent post",
-              source: "recency",
-              score: 0.9,
-            } : undefined,
-          })),
-          nextCursor,
+          posts: [],
+          nextCursor: undefined,
         };
       }
     }),

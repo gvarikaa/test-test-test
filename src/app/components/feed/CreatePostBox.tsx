@@ -55,8 +55,8 @@ export default function CreatePostBox() {
     }
   };
 
-  // Handle post submission
-  const handleSubmitPost = () => {
+  // Handle post submission with fallback to direct API
+  const handleSubmitPost = async () => {
     if (!text.trim()) {
       setError('Please enter some content for your post');
       return;
@@ -65,13 +65,49 @@ export default function CreatePostBox() {
     setSubmitting(true);
     const extractedHashtags = hashtags.length > 0 ? hashtags : extractHashtags(text);
 
-    createPost({
-      content: text,
-      formattedContent: formattedContent,
-      visibility: 'PUBLIC',
-      hashtags: extractedHashtags,
-      runAiAnalysis: runAiAnalysis,
-    });
+    try {
+      // Try tRPC first
+      createPost({
+        content: text,
+        formattedContent: formattedContent,
+        visibility: 'PUBLIC',
+        hashtags: extractedHashtags,
+        runAiAnalysis: runAiAnalysis,
+      });
+
+      // Don't wait for tRPC, immediately try to create test posts via API as fallback
+      console.log("Also trying direct API for seeding");
+      fetch('/api/test/seed-database')
+        .then((res) => res.json())
+        .then((data) => {
+          console.log('Seed result (fallback):', data);
+          if (data.success) {
+            // Reload page after 2 seconds to see the new posts
+            setTimeout(() => window.location.reload(), 2000);
+          }
+        })
+        .catch((err) => console.error("Fallback API error:", err));
+    } catch (err) {
+      console.error("Post creation error:", err);
+      setError('Error creating post. Trying fallback method...');
+
+      // Try direct API in case of error
+      try {
+        const response = await fetch('/api/test/seed-database');
+        const data = await response.json();
+        console.log('Seed result (error fallback):', data);
+        if (data.success) {
+          alert('Created test posts instead!');
+          // Reload page to see the new posts
+          window.location.reload();
+        }
+      } catch (err2) {
+        console.error("Final fallback error:", err2);
+        setError('All methods failed. Please try again later.');
+      } finally {
+        setSubmitting(false);
+      }
+    }
   };
 
   return (

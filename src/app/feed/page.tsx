@@ -132,7 +132,8 @@ export default function FeedPage() {
                           >
                             Videos
                           </button>
-                          <button
+                          {/* Poll type removed as it's not in the schema */}
+                          {/* <button
                             onClick={() => setContentType('POLL')}
                             className={`px-2 py-0.5 text-xs rounded-full ${
                               contentType === 'POLL'
@@ -141,7 +142,7 @@ export default function FeedPage() {
                             }`}
                           >
                             Polls
-                          </button>
+                          </button> */}
                           <button
                             onClick={() => setContentType('AUDIO')}
                             className={`px-2 py-0.5 text-xs rounded-full ${
@@ -270,7 +271,8 @@ export default function FeedPage() {
                 >
                   Videos
                 </button>
-                <button
+                {/* Poll type removed as it's not in the schema */}
+                {/* <button
                   onClick={() => setContentType('POLL')}
                   className={`px-2 py-0.5 text-sm rounded-md ${
                     contentType === 'POLL'
@@ -279,7 +281,7 @@ export default function FeedPage() {
                   }`}
                 >
                   Polls
-                </button>
+                </button> */}
                 <button
                   onClick={() => setContentType('AUDIO')}
                   className={`px-2 py-0.5 text-sm rounded-md ${

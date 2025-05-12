@@ -69,7 +69,13 @@ export async function POST(request: NextRequest) {
 
     // Determine the folder path based on media type
     const folderPath = `/${mediaType.toLowerCase()}s/${session.user.id}`;
-    
+    console.log('Upload attempt to folder path:', folderPath);
+    console.log('Using Bunny config:', {
+      storageName: process.env.BUNNY_STORAGE_NAME,
+      // Don't log full API key, just first few chars for verification
+      apiKeyPrefix: process.env.BUNNY_API_KEY?.substring(0, 8) + '...'
+    });
+
     // Get the appropriate storage provider using the factory
     // This is the key part that implements Dependency Inversion:
     // We're depending on the StorageProvider interface, not the concrete implementation

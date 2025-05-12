@@ -118,9 +118,9 @@ export default function Post({ post }: PostProps) {
       <div className="flex items-center justify-between p-3">
         <div className="flex items-center gap-2">
           <Link href={`/profile/${post.user.id}`}>
-            <Image 
-              src={post.user.image}
-              alt={post.user.name}
+            <Image
+              src={post.user.image || 'https://ui-avatars.com/api/?name=Unknown+User&background=random&color=fff'}
+              alt={post.user.name || 'Unknown User'}
               width={40}
               height={40}
               className="h-10 w-10 rounded-full"
@@ -131,7 +131,7 @@ export default function Post({ post }: PostProps) {
               href={`/profile/${post.user.id}`}
               className="font-semibold text-text-primary hover:underline"
             >
-              {post.user.name}
+              {post.user.name || 'Unknown User'}
             </Link>
             <div className="flex items-center gap-1 text-xs text-text-secondary">
               <span>{new Date(post.createdAt).toLocaleDateString('en-US', {

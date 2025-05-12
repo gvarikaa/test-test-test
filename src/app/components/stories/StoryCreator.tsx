@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { trpc } from '@/lib/trpc/client';
 import { MediaType } from '@prisma/client';
-import { useUpload } from '@/hooks/use-upload';
+import { useStoryUpload } from '@/hooks/use-story-upload';
 
 export default function StoryCreator() {
   const router = useRouter();
@@ -18,7 +18,7 @@ export default function StoryCreator() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   
-  const upload = useUpload();
+  const upload = useStoryUpload();
   const createStoryMutation = trpc.story.createStory.useMutation({
     onSuccess: () => {
       router.push('/');
@@ -68,7 +68,7 @@ export default function StoryCreator() {
         return;
       }
 
-      // Upload file
+      // Upload file using our new story-specific upload hook
       const result = await upload.uploadMedia(file, (progress) => {
         setUploadProgress(progress);
       });
@@ -79,11 +79,11 @@ export default function StoryCreator() {
         return;
       }
 
-      // Create story
+      // Create story with properties from our new hook response
       createStoryMutation.mutate({
         media: [{
           url: result.url,
-          type: mediaType,
+          type: result.mediaType,
           thumbnailUrl: result.thumbnailUrl,
           width: result.width,
           height: result.height,

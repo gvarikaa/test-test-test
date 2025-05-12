@@ -101,29 +101,31 @@ export const personalizationRouter = router({
           'story',
         ]).default('post'),
         limit: z.number().min(1).max(50).default(20),
-      })
+      }).optional()
     )
     .query(async ({ ctx, input }) => {
       try {
         const userId = ctx.session.user.id;
-        
+        const contentType = input?.contentType as ContentType || ContentType.POST;
+        const limit = input?.limit || 20;
+
         const recommendations = await generatePersonalizedFeed(
           userId,
-          input.contentType as ContentType,
-          input.limit
+          contentType,
+          limit
         );
-        
+
         // If recommendations are empty, try to get trending content as fallback
         if (recommendations.length === 0) {
           const trending = await getTrendingRecommendations(
             userId,
-            input.contentType as ContentType,
-            input.limit
+            contentType,
+            limit
           );
-          
+
           return trending;
         }
-        
+
         return recommendations;
       } catch (error) {
         console.error('Error generating personalized feed:', error);
