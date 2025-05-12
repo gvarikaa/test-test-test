@@ -1,3 +1,6 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -87,6 +90,13 @@ model User {
   sessions                        Session[]
   stories                         Story[]
   viewedStories                   StoryView[]
+  mentionedInPosts                PostMention[]                    @relation("MentionedUser")
+  mentionerInPosts                PostMention[]                    @relation("MentionerUser")
+  postShares                      PostShare[]
+  postReports                     PostReport[]                     @relation("PostReporter")
+  moderatedReports                PostReport[]                     @relation("ReportModerator")
+  pollVotes                       PollVote[]
+  postViews                       PostView[]
 }
 
 model Account {
@@ -124,22 +134,49 @@ model VerificationToken {
 }
 
 model Post {
-  id         String        @id @default(cuid())
-  content    String        @db.Text
-  published  Boolean       @default(true)
-  visibility Visibility    @default(PUBLIC)
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
-  userId     String
-  aiAnalysis AIAnalysis?
-  comments   Comment[]
-  media      Media[]
-  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  hashtags   PostHashtag[]
-  reactions  Reaction[]
-  savedBy    SavedPost[]
+  id               String     @id @default(cuid())
+  content          String     @db.Text
+  formattedContent Json? // For rich text content storing
+  type             PostType   @default(TEXT)
+  published        Boolean    @default(true)
+  visibility       Visibility @default(PUBLIC)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  scheduledFor     DateTime? // For scheduling posts
+  isEdited         Boolean    @default(false)
+  editedAt         DateTime? // When post was last edited
+  userId           String
+  location         String? // Location name
+  latitude         Float? // Geo coordinates
+  longitude        Float? // Geo coordinates
+  isPinned         Boolean    @default(false)
+  viewCount        Int        @default(0)
+  shareCount       Int        @default(0)
+  isHidden         Boolean    @default(false)
+  hiddenReason     String? // Reason for hiding
+
+  // Relations
+  aiAnalysis      AIAnalysis?
+  comments        Comment[]
+  media           Media[]
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hashtags        PostHashtag[]
+  reactions       Reaction[]
+  savedBy         SavedPost[]
+  mentions        PostMention[]
+  shares          PostShare[]
+  reports         PostReport[]
+  poll            Poll?
+  urlPreviews     UrlPreview[]
+  audioRecordings AudioRecording[]
+  views           PostView[]
+  analytics       PostAnalytics?
 
   @@index([userId])
+  @@index([type])
+  @@index([visibility])
+  @@index([createdAt])
+  @@index([isPinned])
 }
 
 model Media {
@@ -191,6 +228,7 @@ model Comment {
   media           Media[]
   reactions       Reaction[]
   commentAnalysis CommentAnalysis?
+  audioRecordings AudioRecording[]
 
   @@index([userId])
   @@index([postId])
@@ -964,69 +1002,69 @@ enum PaymentMethod {
 }
 
 model AITokenLimit {
-  id                    String                @id @default(cuid())
-  userId                String                @unique
-  tier                  SubscriptionTier      @default(FREE)
-  limit                 Int                   @default(150)           // Daily token limit
-  usage                 Int                   @default(0)             // Current usage toward daily limit
-  resetAt               DateTime                                      // When daily limit resets
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
-  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenUsageStats       AITokenUsageStat[]
-  monthlyAllocation     Int                   @default(5000)          // Monthly token allocation
-  previousMonthCarry    Int                   @default(0)             // Tokens carried over from previous month
-  bonusTokens           Int                   @default(0)             // Bonus tokens from promotions
-  lifetimeUsage         Int                   @default(0)             // Total lifetime token usage
-  lifetimeAllocated     Int                   @default(0)             // Total lifetime token allocation
-  lastActivity          DateTime?                                     // Last AI activity timestamp
-  tokenRefreshSchedule  String?                                       // Cron expression for token refresh (tier-dependent)
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  tier                 SubscriptionTier   @default(FREE)
+  limit                Int                @default(150) // Daily token limit
+  usage                Int                @default(0) // Current usage toward daily limit
+  resetAt              DateTime // When daily limit resets
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenUsageStats      AITokenUsageStat[]
+  monthlyAllocation    Int                @default(5000) // Monthly token allocation
+  previousMonthCarry   Int                @default(0) // Tokens carried over from previous month
+  bonusTokens          Int                @default(0) // Bonus tokens from promotions
+  lifetimeUsage        Int                @default(0) // Total lifetime token usage
+  lifetimeAllocated    Int                @default(0) // Total lifetime token allocation
+  lastActivity         DateTime? // Last AI activity timestamp
+  tokenRefreshSchedule String? // Cron expression for token refresh (tier-dependent)
 
   // New fields for enhanced subscription system
-  subscriptionStartedAt DateTime              @default(now())         // When subscription started
-  subscriptionEndsAt    DateTime?                                     // When subscription ends
-  subscriptionPeriod    SubscriptionPeriod    @default(MONTHLY)       // Subscription period length
-  subscriptionId        String?                                       // External subscription ID
-  subscriptionActive    Boolean               @default(true)          // Whether subscription is active
-  preferredModel        PreferredModel        @default(AUTO)          // User's preferred AI model
-  modelAllocation       Json?                                         // Allocation percentages between models
-  customTokens          Int?                                          // For CUSTOM tier only - token amount
-  carryOverLimit        Int                   @default(0)             // Max tokens that can be carried over
-  carryOverPercent      Int                   @default(0)             // % of unused tokens carried (0-100)
-  autoRenew             Boolean               @default(false)         // Whether to auto-renew subscription
-  paymentMethod         PaymentMethod         @default(NONE)          // Payment method used
-  lastBillingDate       DateTime?                                     // Date of last billing
-  nextBillingDate       DateTime?                                     // Date of next billing
-  discountPercent       Int                   @default(0)             // Any discount applied (0-100)
-  discountReason        String?                                       // Reason for discount
+  subscriptionStartedAt DateTime           @default(now()) // When subscription started
+  subscriptionEndsAt    DateTime? // When subscription ends
+  subscriptionPeriod    SubscriptionPeriod @default(MONTHLY) // Subscription period length
+  subscriptionId        String? // External subscription ID
+  subscriptionActive    Boolean            @default(true) // Whether subscription is active
+  preferredModel        PreferredModel     @default(AUTO) // User's preferred AI model
+  modelAllocation       Json? // Allocation percentages between models
+  customTokens          Int? // For CUSTOM tier only - token amount
+  carryOverLimit        Int                @default(0) // Max tokens that can be carried over
+  carryOverPercent      Int                @default(0) // % of unused tokens carried (0-100)
+  autoRenew             Boolean            @default(false) // Whether to auto-renew subscription
+  paymentMethod         PaymentMethod      @default(NONE) // Payment method used
+  lastBillingDate       DateTime? // Date of last billing
+  nextBillingDate       DateTime? // Date of next billing
+  discountPercent       Int                @default(0) // Any discount applied (0-100)
+  discountReason        String? // Reason for discount
 
   // Relations
-  purchases             TokenPurchaseHistory[]                        // Purchase history
+  purchases TokenPurchaseHistory[] // Purchase history
 }
 
 model TokenPurchaseHistory {
-  id                 String            @id @default(cuid())
-  tokenLimitId       String
-  amount             Int               // Number of tokens purchased
-  cost               Float             // Cost of purchase in currency
-  currency           String            @default("USD")
-  purchaseDate       DateTime          @default(now())
-  expiryDate         DateTime?         // When tokens expire if applicable
-  tier               SubscriptionTier
-  period             SubscriptionPeriod
-  paymentMethod      PaymentMethod
-  transactionId      String?           // External payment processor transaction ID
-  isRecurring        Boolean           @default(false)
-  isCancelled        Boolean           @default(false)
-  cancellationDate   DateTime?
-  notes              String?
-  metadata           Json?
-  model              PreferredModel    @default(AUTO)
-  invoiceUrl         String?           // URL to invoice document
-  receiptUrl         String?           // URL to receipt document
-  discountPercent    Int               @default(0)
-  discountCode       String?
-  tokenLimit         AITokenLimit      @relation(fields: [tokenLimitId], references: [id], onDelete: Cascade)
+  id               String             @id @default(cuid())
+  tokenLimitId     String
+  amount           Int // Number of tokens purchased
+  cost             Float // Cost of purchase in currency
+  currency         String             @default("USD")
+  purchaseDate     DateTime           @default(now())
+  expiryDate       DateTime? // When tokens expire if applicable
+  tier             SubscriptionTier
+  period           SubscriptionPeriod
+  paymentMethod    PaymentMethod
+  transactionId    String? // External payment processor transaction ID
+  isRecurring      Boolean            @default(false)
+  isCancelled      Boolean            @default(false)
+  cancellationDate DateTime?
+  notes            String?
+  metadata         Json?
+  model            PreferredModel     @default(AUTO)
+  invoiceUrl       String? // URL to invoice document
+  receiptUrl       String? // URL to receipt document
+  discountPercent  Int                @default(0)
+  discountCode     String?
+  tokenLimit       AITokenLimit       @relation(fields: [tokenLimitId], references: [id], onDelete: Cascade)
 
   @@index([tokenLimitId])
   @@index([purchaseDate])
@@ -1035,29 +1073,29 @@ model TokenPurchaseHistory {
 }
 
 model AITokenUsageStat {
-  id                String        @id @default(cuid())
-  tokenLimitId      String
-  operationType     String        // Type of operation (chat, content analysis, recommendation, etc.)
-  tokensUsed        Int           // Number of tokens used in this operation
-  model             PreferredModel // Model used for the operation
-  timestamp         DateTime      @default(now())
-  endpoint          String?       // API endpoint or function called
-  featureArea       String?       // Area of the application (health, chat, content, etc.)
-  prompt            String?       // The prompt used (sanitized/truncated for privacy)
-  promptTokens      Int?          // Number of tokens in the prompt
-  completionTokens  Int?          // Number of tokens in the completion
-  success           Boolean       @default(true) // Whether the operation was successful
-  errorCode         String?       // Error code if the operation failed
-  metadata          Json?         // Additional metadata for analysis
-  responseTime      Int?          // Response time in milliseconds
-  costMultiplier    Float         @default(1.0)  // Model-specific cost multiplier
-  contentType       String?       // Type of content (post, chat, health, etc.)
-  contentId         String?       // ID of the content being analyzed
-  userAction        String?       // Specific user action that triggered this usage
-  tokenCost         Float?        // Calculated cost in tokens after model multiplier
-  featureCategory   String?       // High-level category (creation, analysis, recommendation)
-  associatedUrl     String?       // URL associated with this operation
-  tokenLimit        AITokenLimit  @relation(fields: [tokenLimitId], references: [id], onDelete: Cascade)
+  id               String         @id @default(cuid())
+  tokenLimitId     String
+  operationType    String // Type of operation (chat, content analysis, recommendation, etc.)
+  tokensUsed       Int // Number of tokens used in this operation
+  model            PreferredModel // Model used for the operation
+  timestamp        DateTime       @default(now())
+  endpoint         String? // API endpoint or function called
+  featureArea      String? // Area of the application (health, chat, content, etc.)
+  prompt           String? // The prompt used (sanitized/truncated for privacy)
+  promptTokens     Int? // Number of tokens in the prompt
+  completionTokens Int? // Number of tokens in the completion
+  success          Boolean        @default(true) // Whether the operation was successful
+  errorCode        String? // Error code if the operation failed
+  metadata         Json? // Additional metadata for analysis
+  responseTime     Int? // Response time in milliseconds
+  costMultiplier   Float          @default(1.0) // Model-specific cost multiplier
+  contentType      String? // Type of content (post, chat, health, etc.)
+  contentId        String? // ID of the content being analyzed
+  userAction       String? // Specific user action that triggered this usage
+  tokenCost        Float? // Calculated cost in tokens after model multiplier
+  featureCategory  String? // High-level category (creation, analysis, recommendation)
+  associatedUrl    String? // URL associated with this operation
+  tokenLimit       AITokenLimit   @relation(fields: [tokenLimitId], references: [id], onDelete: Cascade)
 
   @@index([tokenLimitId])
   @@index([timestamp])
@@ -1069,26 +1107,26 @@ model AITokenUsageStat {
 }
 
 model AISubscriptionPlan {
-  id                  String            @id @default(cuid())
-  name                String
-  tier                SubscriptionTier
-  period              SubscriptionPeriod
-  tokenAmount         Int               // Base token amount for this plan
-  costPerPeriod       Float             // Cost per period
-  currency            String            @default("USD")
-  description         String?
-  features            Json              // Array of included features
-  isActive            Boolean           @default(true)
-  carryOverPercent    Int               @default(0)     // % of unused tokens carried over
-  maxCarryOver        Int               @default(0)     // Max tokens that can be carried over
-  discountPercentage  Json?             // Discounts for longer periods {QUARTERLY: 10, BIANNUAL: 15, ANNUAL: 20}
-  modelPricing        Json?             // Model-specific pricing {GEMINI_1_5_PRO: 1.0, GEMINI_2_5_PRO: 1.4}
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
-  displayOrder        Int               @default(0)     // Order in which plans are displayed
-  popularPlan         Boolean           @default(false) // Whether this is marked as a popular plan
-  maxTokensPerDay     Int?              // Max tokens per day (rate limiting)
-  maxTokensPerHour    Int?              // Max tokens per hour (rate limiting)
+  id                 String             @id @default(cuid())
+  name               String
+  tier               SubscriptionTier
+  period             SubscriptionPeriod
+  tokenAmount        Int // Base token amount for this plan
+  costPerPeriod      Float // Cost per period
+  currency           String             @default("USD")
+  description        String?
+  features           Json // Array of included features
+  isActive           Boolean            @default(true)
+  carryOverPercent   Int                @default(0) // % of unused tokens carried over
+  maxCarryOver       Int                @default(0) // Max tokens that can be carried over
+  discountPercentage Json? // Discounts for longer periods {QUARTERLY: 10, BIANNUAL: 15, ANNUAL: 20}
+  modelPricing       Json? // Model-specific pricing {GEMINI_1_5_PRO: 1.0, GEMINI_2_5_PRO: 1.4}
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  displayOrder       Int                @default(0) // Order in which plans are displayed
+  popularPlan        Boolean            @default(false) // Whether this is marked as a popular plan
+  maxTokensPerDay    Int? // Max tokens per day (rate limiting)
+  maxTokensPerHour   Int? // Max tokens per hour (rate limiting)
 
   @@unique([tier, period])
   @@index([tier])
@@ -1098,21 +1136,21 @@ model AISubscriptionPlan {
 }
 
 model AITokenUsageAggregation {
-  id                 String       @id @default(cuid())
-  userId             String
-  date               DateTime     // Day/month being aggregated
-  aggregationType    String       // "daily", "monthly", "feature", "model", etc.
-  feature            String?      // Feature area if aggregating by feature
-  model              String?      // Model if aggregating by model
-  tokenCount         Int          // Total tokens used
-  operationCount     Int          // Number of operations
-  averageResponseTime Int?        // Average response time
-  successRate        Float?       // Success rate (0-1)
-  peakUsageTime      DateTime?    // Time of peak usage
-  costInTokens       Float?       // Cost in tokens (after model multiplier)
-  metadata           Json?
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
+  id                  String    @id @default(cuid())
+  userId              String
+  date                DateTime // Day/month being aggregated
+  aggregationType     String // "daily", "monthly", "feature", "model", etc.
+  feature             String? // Feature area if aggregating by feature
+  model               String? // Model if aggregating by model
+  tokenCount          Int // Total tokens used
+  operationCount      Int // Number of operations
+  averageResponseTime Int? // Average response time
+  successRate         Float? // Success rate (0-1)
+  peakUsageTime       DateTime? // Time of peak usage
+  costInTokens        Float? // Cost in tokens (after model multiplier)
+  metadata            Json?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@unique([userId, date, aggregationType, feature, model])
   @@index([userId])
@@ -1724,10 +1762,178 @@ model GroupReport {
   @@index([reportedUserId])
 }
 
+// New models for post system enhancements
+
+model PostMention {
+  id          String   @id @default(cuid())
+  postId      String
+  userId      String // The user being mentioned
+  mentionerId String // The user who created the mention
+  startIndex  Int?
+  endIndex    Int?
+  createdAt   DateTime @default(now())
+
+  post      Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User @relation("MentionedUser", fields: [userId], references: [id], onDelete: Cascade)
+  mentioner User @relation("MentionerUser", fields: [mentionerId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+  @@index([mentionerId])
+}
+
+model PostShare {
+  id        String        @id @default(cuid())
+  postId    String
+  userId    String
+  platform  SharePlatform
+  createdAt DateTime      @default(now())
+  message   String?
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([userId])
+}
+
+model PostReport {
+  id            String       @id @default(cuid())
+  postId        String
+  reporterId    String
+  type          ReportType
+  reason        String?      @db.Text
+  status        ReportStatus @default(PENDING)
+  createdAt     DateTime     @default(now())
+  resolvedAt    DateTime?
+  moderatorId   String?
+  moderatorNote String?
+
+  post      Post  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reporter  User  @relation("PostReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  moderator User? @relation("ReportModerator", fields: [moderatorId], references: [id], onDelete: SetNull)
+
+  @@index([postId])
+  @@index([reporterId])
+  @@index([status])
+}
+
+model Poll {
+  id                   String    @id @default(cuid())
+  postId               String    @unique
+  question             String    @db.Text
+  allowMultipleChoices Boolean   @default(false)
+  isAnonymous          Boolean   @default(false)
+  expiresAt            DateTime?
+  createdAt            DateTime  @default(now())
+
+  post    Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  options PollOption[]
+
+  @@index([postId])
+}
+
+model PollOption {
+  id       String @id @default(cuid())
+  pollId   String
+  text     String
+  position Int
+
+  poll  Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes PollVote[]
+
+  @@index([pollId])
+}
+
+model PollVote {
+  id           String   @id @default(cuid())
+  pollOptionId String
+  userId       String
+  createdAt    DateTime @default(now())
+
+  option PollOption @relation(fields: [pollOptionId], references: [id], onDelete: Cascade)
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([pollOptionId, userId])
+  @@index([pollOptionId])
+  @@index([userId])
+}
+
+model UrlPreview {
+  id          String   @id @default(cuid())
+  postId      String
+  url         String
+  title       String?
+  description String?
+  imageUrl    String?
+  domain      String?
+  createdAt   DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+}
+
+model AudioRecording {
+  id         String   @id @default(cuid())
+  postId     String?
+  commentId  String?
+  url        String
+  duration   Int?
+  transcript String?
+  waveform   String?
+  createdAt  DateTime @default(now())
+
+  post    Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([commentId])
+}
+
+model PostView {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String?
+  ipAddress String?
+  userAgent String?
+  referer   String?
+  duration  Int?
+  createdAt DateTime @default(now())
+
+  post Post  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([postId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model PostAnalytics {
+  id              String   @id @default(cuid())
+  postId          String   @unique
+  dailyViews      Json?
+  viewsBySource   Json?
+  viewsByLocation Json?
+  viewsByDevice   Json?
+  engagementRate  Float?
+  reachCount      Int      @default(0)
+  clickCount      Int      @default(0)
+  impressionCount Int      @default(0)
+  updatedAt       DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+}
+
 enum Visibility {
   PUBLIC
   FRIENDS
   PRIVATE
+  GROUP
+  SPECIFIC_USERS
 }
 
 enum NotificationPriority {
@@ -1764,6 +1970,12 @@ enum ReactionType {
   WOW
   SAD
   ANGRY
+  CARE
+  CURIOUS
+  INSIGHTFUL
+  CELEBRATE
+  SUPPORT
+  FIRE
 }
 
 enum FriendshipStatus {
@@ -1887,4 +2099,14 @@ enum ReportType {
   MISINFORMATION
   INAPPROPRIATE_CONTENT
   OTHER
+}
+
+enum PostType {
+  TEXT
+  PHOTO
+  VIDEO
+  LINK
+  POLL
+  AUDIO
+  DOCUMENT
 }

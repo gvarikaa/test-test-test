@@ -63,9 +63,9 @@ export default function RecommendationBadge({
   }
 
   return (
-    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700 ${className}`}>
+    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs bg-white/90 dark:bg-gray-800/90 shadow-sm border border-gray-200/50 dark:border-gray-700/50 backdrop-blur-sm ${className}`}>
       {icon}
-      <span className="ml-1 text-gray-700 dark:text-gray-300">{label}</span>
+      <span className="ml-1 text-gray-700 dark:text-gray-300 text-opacity-90 dark:text-opacity-90">{label}</span>
     </div>
   );
 }

@@ -27,6 +27,35 @@ export default function Home() {
   const { data: session } = useSession();
   const [usePersonalized, setUsePersonalized] = useState(true);
   const [showRecommendationInfo, setShowRecommendationInfo] = useState(false);
+  // Reference to the posts returned by tRPC for use in the debug section
+  const [apiPosts, setApiPosts] = useState([]);
+
+  // For direct debug access to posts
+  const [directPosts, setDirectPosts] = useState([]);
+  const [directPostsLoading, setDirectPostsLoading] = useState(false);
+  const [directPostsError, setDirectPostsError] = useState(null);
+
+  // Fetch posts directly from the API to bypass tRPC
+  const fetchDirectPosts = async () => {
+    try {
+      setDirectPostsLoading(true);
+      const response = await fetch('/api/test/debug-posts');
+      const data = await response.json();
+
+      if (data.success) {
+        console.log("Direct API posts:", data.posts);
+        setDirectPosts(data.posts);
+      } else {
+        console.error("Error from direct API:", data.error);
+        setDirectPostsError(data.error);
+      }
+    } catch (error) {
+      console.error("Error fetching direct posts:", error);
+      setDirectPostsError(error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      setDirectPostsLoading(false);
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -34,13 +63,14 @@ export default function Home() {
     // ავტომატურად დავაყენოთ მუქი თემა
     document.documentElement.classList.add('dark');
 
-    // Check local storage for personalization preference
+    // Set personalization to be enabled by default (automatic personalization)
+    setUsePersonalized(true);
     if (typeof window !== 'undefined') {
-      const pref = localStorage.getItem('usePersonalizedFeed');
-      if (pref !== null) {
-        setUsePersonalized(pref === 'true');
-      }
+      localStorage.setItem('usePersonalizedFeed', 'true');
     }
+
+    // Fetch posts directly from API for debugging
+    fetchDirectPosts();
   }, []);
 
   // Get personalized feed if user is authenticated and personalization is enabled
@@ -50,7 +80,7 @@ export default function Home() {
     error: personalizedError,
     refetch: refetchPersonalized
   } = api.post.getPersonalizedFeed.useQuery(
-    { limit: 10, includeReasons: true },
+    undefined, // Don't provide parameters for now to simplify
     {
       enabled: !!session && usePersonalized && mounted,
       staleTime: 2 * 60 * 1000, // 2 minutes
@@ -64,17 +94,19 @@ export default function Home() {
     error: standardError,
     refetch: refetchStandard
   } = api.post.getAll.useQuery(
-    { limit: 10, personalized: false },
+    undefined, // Don't provide parameters for now to simplify
     {
-      enabled: !usePersonalized || !session || !mounted,
+      enabled: mounted, // Only require mounted, not session or personalization setting
       staleTime: 2 * 60 * 1000, // 2 minutes
     }
   );
 
+  // This function is kept for compatibility but won't be exposed in the UI
+  // since we're making personalization automatic
   const togglePersonalization = () => {
-    setUsePersonalized(!usePersonalized);
+    setUsePersonalized(true); // Always use personalized feed
     if (typeof window !== 'undefined') {
-      localStorage.setItem('usePersonalizedFeed', (!usePersonalized).toString());
+      localStorage.setItem('usePersonalizedFeed', 'true');
     }
   };
 
@@ -85,6 +117,48 @@ export default function Home() {
       refetchStandard();
     }
   };
+
+  // Debug function to help troubleshoot response formats
+  const debugApiState = () => {
+    console.log("Session:", session);
+    console.log("Loading states:", { isLoadingPersonalized, isLoadingStandard });
+    console.log("Error states:", { personalizedError, standardError });
+    console.log("usePersonalized setting:", usePersonalized);
+
+    if (personalizedData) {
+      console.log("Personalized data structure:", Object.keys(personalizedData));
+      if (personalizedData.posts) {
+        console.log("Personalized posts count:", personalizedData.posts.length);
+        if (personalizedData.posts.length > 0) {
+          console.log("First post sample:", personalizedData.posts[0]);
+        }
+      }
+    }
+
+    if (standardData) {
+      console.log("Standard data structure:", Object.keys(standardData));
+      if (standardData.posts) {
+        console.log("Standard posts count:", standardData.posts.length);
+        if (standardData.posts.length > 0) {
+          console.log("First post sample:", standardData.posts[0]);
+        }
+      }
+    }
+  };
+
+  // Run debug analysis when data changes
+  useEffect(() => {
+    if (mounted && (standardData || personalizedData)) {
+      debugApiState();
+    }
+
+    // Update apiPosts state for use throughout the component
+    // Always prefer personalized data if available
+    const postsFromApi = personalizedData?.posts || standardData?.posts || [];
+
+    setApiPosts(postsFromApi);
+
+  }, [standardData, personalizedData, mounted, usePersonalized]);
 
   // Display logic for posts feed
   const displayPosts = (() => {
@@ -132,12 +206,16 @@ export default function Home() {
       );
     }
 
-    // Get the appropriate posts based on personalization setting
-    const apiPosts = usePersonalized && personalizedData
-      ? personalizedData.posts
-      : standardData?.posts || [];
+    // Always use personalized data if available, fall back to standard
+    const apiPosts = personalizedData?.posts || standardData?.posts || [];
 
-    if (apiPosts.length === 0) {
+    console.log("apiPosts:", apiPosts);
+
+    // Get the locally stored apiPosts
+    const postsToDisplay = apiPosts;
+
+    if (!postsToDisplay || postsToDisplay.length === 0) {
+      console.log("No posts found - showing empty state");
       return (
         <div className="p-6 text-center bg-dark-card rounded-lg border border-dark-border">
           <h3 className="text-lg font-medium text-gray-300 mb-2">
@@ -148,37 +226,46 @@ export default function Home() {
               ? 'Your personalized feed is empty. Follow more topics or users to see content.'
               : 'No posts are available right now. Check back later!'}
           </p>
-          <button
-            onClick={handleRefresh}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-          >
-            <RefreshCw size={16} className="inline mr-2" />
-            Refresh Feed
-          </button>
+          <div className="flex justify-center gap-4">
+            <button
+              onClick={handleRefresh}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+            >
+              <RefreshCw size={16} className="inline mr-2" />
+              Refresh Feed
+            </button>
+            <button
+              onClick={fetchDirectPosts}
+              className="px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors"
+            >
+              <RefreshCw size={16} className="inline mr-2" />
+              Try Direct API
+            </button>
+          </div>
         </div>
       );
     }
 
     return (
       <div className="space-y-4">
-        {apiPosts.map((post) => (
-          <div key={post.id} className="relative">
+        {postsToDisplay && postsToDisplay.map((post) => (
+          <div key={post?.id} className="relative">
             {/* Show recommendation badge if available */}
-            {usePersonalized && post.recommendationMetadata && (
+            {post?.recommendationMetadata && (
               <div className="absolute -top-2 right-2 z-10">
-                <RecommendationBadge reason={post.recommendationMetadata.reason} />
+                <RecommendationBadge reason={post.recommendationMetadata?.reason} />
               </div>
             )}
 
             <Post
               post={{
-                id: post.id,
-                user: post.user,
-                content: post.content,
-                images: post.media?.map(m => m.url) || [],
-                createdAt: post.createdAt,
-                likes: post._count?.reactions || 0,
-                comments: post._count?.comments || 0,
+                id: post?.id,
+                user: post?.user,
+                content: post?.content,
+                images: post?.media?.map(m => m.url) || [],
+                createdAt: post?.createdAt,
+                likes: post?._count?.reactions || 0,
+                comments: post?._count?.comments || 0,
                 shares: 0,
               }}
             />
@@ -214,42 +301,20 @@ export default function Home() {
           {session && (
             <div className="mb-4 flex items-center justify-between bg-dark-card p-3 rounded-lg">
               <div className="flex items-center gap-2">
-                {usePersonalized && (
-                  <Sparkles className="w-5 h-5 text-blue-500" />
-                )}
+                <Sparkles className="w-5 h-5 text-blue-500" />
                 <h2 className="text-sm font-medium text-gray-200">
-                  {usePersonalized ? 'Personalized Feed' : 'Standard Feed'}
+                  Personalized For You
                 </h2>
-
-                {usePersonalized && (
-                  <button
-                    onClick={() => setShowRecommendationInfo(!showRecommendationInfo)}
-                    className="text-xs text-blue-400 hover:text-blue-300 ml-2"
-                  >
-                    <span className="hidden sm:inline">How it works</span>
-                    <span className="sm:hidden">?</span>
-                  </button>
-                )}
+                <button
+                  onClick={() => setShowRecommendationInfo(!showRecommendationInfo)}
+                  className="text-xs text-blue-400 hover:text-blue-300 ml-2"
+                >
+                  <span className="hidden sm:inline">How it works</span>
+                  <span className="sm:hidden">?</span>
+                </button>
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  onClick={togglePersonalization}
-                  className="text-xs text-gray-300 hover:text-white flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-800"
-                >
-                  {usePersonalized ? (
-                    <>
-                      <Filter className="w-3 h-3" />
-                      <span className="hidden sm:inline">Standard</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-3 h-3" />
-                      <span className="hidden sm:inline">Personalized</span>
-                    </>
-                  )}
-                </button>
-
                 <button
                   onClick={handleRefresh}
                   disabled={isLoadingPersonalized || isLoadingStandard}
@@ -288,10 +353,139 @@ export default function Home() {
             </div>
           )}
 
-          {/* პოსტების ფიდი */}
-          <div className="posts-feed space-y-4">
-            {displayPosts}
-          </div>
+          {/* დევ რეჟიმში - დამალულია საბოლოო ვერსიაში */}
+          {process.env.NODE_ENV === 'development' && (
+            <>
+              {/* Database status display */}
+              {directPostsLoading ? (
+                <div className="p-4 mb-4 bg-blue-900/20 border border-blue-800 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
+                    <h3 className="font-medium text-blue-400">Fetching posts directly from database...</h3>
+                  </div>
+                </div>
+              ) : directPostsError ? (
+                <div className="p-4 mb-4 bg-red-900/20 border border-red-800 rounded-lg">
+                  <h3 className="font-medium text-red-400 mb-2 flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5" />
+                    Database Connection Error
+                  </h3>
+                  <p className="text-sm text-red-300">{directPostsError}</p>
+                  <button
+                    onClick={fetchDirectPosts}
+                    className="mt-2 px-3 py-1 bg-red-700 text-white text-sm rounded hover:bg-red-600"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              ) : directPosts.length > 0 && (!apiPosts || apiPosts.length === 0) ? (
+                <div className="mb-4 p-4 bg-green-900/20 border border-green-800 rounded-lg">
+                  <h3 className="font-medium text-green-400 mb-2 flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5" />
+                    API Connection Issue
+                  </h3>
+                  <p className="text-sm text-green-300">
+                    Posts exist in database but aren't being returned through the API.
+                    This might indicate a connection issue.
+                  </p>
+                  <button
+                    onClick={handleRefresh}
+                    className="mt-2 px-3 py-1 bg-green-700 text-white text-sm rounded hover:bg-green-600"
+                  >
+                    Retry API Connection
+                  </button>
+                </div>
+              ) : directPosts.length === 0 && (
+                <div className="p-4 mb-4 bg-amber-900/20 border border-amber-800 rounded-lg">
+                  <h3 className="font-medium text-amber-400 mb-2 flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5" />
+                    No posts found in database
+                  </h3>
+                  <p className="text-sm text-amber-300">
+                    There appear to be no posts in the database. Try seeding the database or creating some posts.
+                  </p>
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={fetchDirectPosts}
+                      className="px-3 py-1 bg-amber-700 text-white text-sm rounded hover:bg-amber-600"
+                    >
+                      Check Database
+                    </button>
+                    <button
+                      onClick={() => fetch('/api/test/seed-database').then(res => res.json()).then(data => {
+                        console.log('Seed result:', data);
+                        if (data.success) {
+                          alert('Database seeded successfully! Refreshing...');
+                          fetchDirectPosts();
+                        } else {
+                          alert('Error seeding database: ' + data.error);
+                        }
+                      })}
+                      className="px-3 py-1 bg-green-700 text-white text-sm rounded hover:bg-green-600"
+                    >
+                      Seed Database
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Tools for debugging posts */}
+              <div className="mb-4 p-4 bg-indigo-900/20 border border-indigo-800 rounded-lg">
+                <h3 className="font-medium text-indigo-400 mb-2">
+                  Developer Tools
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={fetchDirectPosts}
+                    className="px-3 py-1 bg-indigo-700 text-white text-sm rounded hover:bg-indigo-600"
+                  >
+                    Check Database
+                  </button>
+                  <button
+                    onClick={() => fetch('/api/test/fix-image-urls').then(res => res.json()).then(data => {
+                      console.log('Image fix result:', data);
+                      if (data.success) {
+                        alert('Image URLs fixed successfully! Refreshing...');
+                        fetchDirectPosts();
+                      } else {
+                        alert('Error fixing image URLs: ' + data.error);
+                      }
+                    })}
+                    className="px-3 py-1 bg-blue-700 text-white text-sm rounded hover:bg-blue-600"
+                  >
+                    Fix Image Links
+                  </button>
+                  <button
+                    onClick={() => fetch('/api/test/seed-database').then(res => res.json()).then(data => {
+                      console.log('Seed result:', data);
+                      if (data.success) {
+                        alert('Database seeded successfully! Refreshing...');
+                        fetchDirectPosts();
+                      } else {
+                        alert('Error seeding database: ' + data.error);
+                      }
+                    })}
+                    className="px-3 py-1 bg-green-700 text-white text-sm rounded hover:bg-green-600"
+                  >
+                    Seed Test Posts
+                  </button>
+                  <button
+                    onClick={handleRefresh}
+                    className="px-3 py-1 bg-purple-700 text-white text-sm rounded hover:bg-purple-600"
+                  >
+                    Refresh Feed
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Posts feed */}
+          {apiPosts && apiPosts.length > 0 && (
+            <div className="posts-feed space-y-4">
+              {displayPosts}
+            </div>
+          )}
         </main>
 
         {/* მარჯვენა სვეტი - ჩატი და კონტაქტები */}

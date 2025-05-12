@@ -24,6 +24,8 @@ interface PersonalizedFeedProps {
   showReasons?: boolean;
   showSourceFilters?: boolean;
   className?: string;
+  // New props for automatic personalization
+  autoPersonalize?: boolean;
 }
 
 const reasonIcons: Record<string, React.ReactNode> = {
@@ -55,20 +57,20 @@ export default function PersonalizedFeed({
   initialLimit = 10,
   header,
   showReasons = true,
-  showSourceFilters = true,
+  showSourceFilters = false, // Default to false to hide filters for automatic personalization
   className = '',
 }: PersonalizedFeedProps) {
   const { ref, inView } = useInView();
   const [limit, setLimit] = useState(initialLimit);
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  
+
   // Get personalized feed
-  const { data: recommendations, isLoading, error, refetch } = 
+  const { data: recommendations, isLoading, error, refetch } =
     trpc.personalization.getPersonalizedFeed.useQuery(
-      { 
-        contentType: contentType as any, 
-        limit 
+      {
+        contentType: contentType as any,
+        limit
       },
       { staleTime: 5 * 60 * 1000 } // 5 minutes
     );
@@ -287,10 +289,10 @@ export default function PersonalizedFeed({
           {combinedContent.length === 0 ? (
             <div className="p-8 text-center bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-gray-700">
               <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">
-                No content found
+                Personalizing your feed...
               </h3>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                We couldn't find any content for you right now. Try again later or follow more people.
+                We're analyzing your preferences to build a personalized feed just for you. Check back soon or try refreshing.
               </p>
               <button
                 onClick={handleRefresh}
@@ -309,11 +311,11 @@ export default function PersonalizedFeed({
                 if (contentType === 'post') {
                   return (
                     <div key={recommendation.id} className="relative">
-                      {/* Recommendation reason badge */}
+                      {/* Recommendation reason badge - Subtler design */}
                       {showReasons && (
-                        <div className="absolute -top-2 right-2 z-10 inline-flex items-center px-2 py-1 rounded-full text-xs bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700">
+                        <div className="absolute -top-2 right-2 z-10 inline-flex items-center px-2 py-1 rounded-full text-xs bg-white/90 dark:bg-gray-800/90 shadow-sm border border-gray-200/50 dark:border-gray-700/50 backdrop-blur-sm">
                           {reasonIcons[recommendation.reason]}
-                          <span className="ml-1 text-gray-700 dark:text-gray-300">
+                          <span className="ml-1 text-gray-700 dark:text-gray-300 text-opacity-90 dark:text-opacity-90">
                             {reasonLabels[recommendation.reason]}
                           </span>
                         </div>
@@ -336,11 +338,11 @@ export default function PersonalizedFeed({
                 if (contentType === 'reel') {
                   return (
                     <div key={recommendation.id} className="relative bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-                      {/* Recommendation reason badge */}
+                      {/* Recommendation reason badge - Subtler design */}
                       {showReasons && (
-                        <div className="absolute top-2 right-2 z-10 inline-flex items-center px-2 py-1 rounded-full text-xs bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700">
+                        <div className="absolute top-2 right-2 z-10 inline-flex items-center px-2 py-1 rounded-full text-xs bg-white/90 dark:bg-gray-800/90 shadow-sm border border-gray-200/50 dark:border-gray-700/50 backdrop-blur-sm">
                           {reasonIcons[recommendation.reason]}
-                          <span className="ml-1 text-gray-700 dark:text-gray-300">
+                          <span className="ml-1 text-gray-700 dark:text-gray-300 text-opacity-90 dark:text-opacity-90">
                             {reasonLabels[recommendation.reason]}
                           </span>
                         </div>

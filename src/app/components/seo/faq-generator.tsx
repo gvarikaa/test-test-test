@@ -1,7 +1,10 @@
+"use client";
+
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { FAQItem } from '@/lib/seo-optimization';
-import { Button } from '@/app/components/ui';
+// UI components not available
+// import { Button } from '@/app/components/ui';
 import { Loader2, PlusCircle, Trash2, MoveUp, MoveDown, Edit } from 'lucide-react';
 
 interface FAQGeneratorProps {

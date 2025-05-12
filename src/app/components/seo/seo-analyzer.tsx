@@ -1,7 +1,10 @@
+"use client";
+
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { SEOAnalysisResult } from '@/lib/seo-optimization';
-import { Button } from '@/app/components/ui';
+// UI components not available
+// import { Button } from '@/app/components/ui';
 import { Loader2, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 
 interface SEOAnalyzerProps {

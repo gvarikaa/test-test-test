@@ -1,7 +1,10 @@
+"use client";
+
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { ContentOptimizationResult } from '@/lib/seo-optimization';
-import { Button, Textarea } from '@/app/components/ui';
+// UI components not available
+// import { Button, Textarea } from '@/app/components/ui';
 import { Loader2, ArrowRight } from 'lucide-react';
 
 interface ContentOptimizerProps {

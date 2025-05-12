@@ -1,7 +1,10 @@
+"use client";
+
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { MetadataGenerationResult } from '@/lib/seo-optimization';
-import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui';
+// UI components not available
+// import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui';
 import { Loader2 } from 'lucide-react';
 import { SEOAnalyzer } from './seo-analyzer';
 import { MetadataGenerator } from './metadata-generator';

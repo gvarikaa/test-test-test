@@ -14,10 +14,12 @@ import { eventRouter } from './routers/event';
 import { personalizationRouter } from './routers/personalization';
 import { seoRouter } from './routers/seo';
 import { commentAnalysisRouter } from './routers/comment-analysis';
+import { postFallbackRouter } from './routers/post-fallback'; // Fallback router as backup
 
 export const appRouter = router({
   user: userRouter,
-  post: postRouter,
+  post: postRouter, // Using enhanced post router with full functionality
+  postFallback: postFallbackRouter, // Keeping fallback router available if needed
   health: healthRouter,
   notification: notificationRouter,
   chat: chatRouter,

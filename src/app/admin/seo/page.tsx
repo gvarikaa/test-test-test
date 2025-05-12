@@ -1,7 +1,8 @@
 import { Suspense } from 'react';
-import {
-  SEOPageOptimizer
-} from '@/app/components/seo';
+// Temporarily commenting out SEO components due to missing UI dependencies
+// import {
+//   SEOPageOptimizer
+// } from '@/app/components/seo';
 
 export const metadata = {
   title: 'SEO Management | DapDip Admin',
@@ -83,11 +84,15 @@ export default function SEOPage() {
 
         <Suspense fallback={<div className="p-6">Loading content editor...</div>}>
           <div className="p-6">
-            <SEOPageOptimizer
+            {/* SEO component temporarily disabled due to missing UI dependencies */}
+            <div className="p-4 border rounded-lg bg-gray-50 text-center">
+              <p className="text-gray-500">SEO tools are currently unavailable</p>
+            </div>
+            {/* <SEOPageOptimizer
               initialContent="Welcome to DapDip, the social platform that connects people through shared interests and experiences. Our intuitive interface makes it easy to share content, discover new connections, and engage with communities that matter to you."
               initialTitle="DapDip - Connect, Share, and Discover"
               initialKeywords={['social platform', 'content sharing', 'community']}
-            />
+            /> */}
           </div>
         </Suspense>
       </div>

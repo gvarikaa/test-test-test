@@ -5,24 +5,29 @@ import Image from 'next/image';
 import { ContentAnalyzer } from '../posts/content-analyzer';
 import { api } from '@/lib/trpc/api';
 import { Zap, AlertTriangle, ImageIcon, VideoIcon, SmileIcon } from 'lucide-react';
+import { RichTextEditor, stripHtml, extractHashtags } from '../posts/rich-text';
 
 export default function CreatePostBox() {
   const [text, setText] = useState('');
+  const [formattedContent, setFormattedContent] = useState<any>(null);
   const [showAnalyzer, setShowAnalyzer] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hashtags, setHashtags] = useState<string[]>([]);
   const [runAiAnalysis, setRunAiAnalysis] = useState(false);
+  const [showRichEditor, setShowRichEditor] = useState(false);
 
   // Get create post mutation from tRPC
   const { mutate: createPost } = api.post.create.useMutation({
     onSuccess: () => {
       // Reset form after successful post creation
       setText('');
+      setFormattedContent(null);
       setShowAnalyzer(false);
       setHashtags([]);
       setRunAiAnalysis(false);
       setSubmitting(false);
+      setShowRichEditor(false);
     },
     onError: (err) => {
       setError(err.message || 'Error creating post');
@@ -35,13 +40,19 @@ export default function CreatePostBox() {
     setText(suggestion);
   };
 
-  // Extract hashtags from content
-  const extractHashtags = (content: string): string[] => {
-    const hashtagRegex = /#(\w+)/g;
-    const matches = content.match(hashtagRegex);
-    return matches
-      ? matches.map(tag => tag.substring(1).toLowerCase())
-      : [];
+  // Handle rich text content change
+  const handleRichTextChange = (html: string, json: any) => {
+    setText(stripHtml(html));
+    setFormattedContent(json);
+
+    // Extract hashtags from plain text
+    const extractedTags = extractHashtags(stripHtml(html));
+    setHashtags(extractedTags);
+
+    // Hide analyzer when text changes significantly
+    if (showAnalyzer) {
+      setShowAnalyzer(false);
+    }
   };
 
   // Handle post submission
@@ -52,10 +63,11 @@ export default function CreatePostBox() {
     }
 
     setSubmitting(true);
-    const extractedHashtags = extractHashtags(text);
+    const extractedHashtags = hashtags.length > 0 ? hashtags : extractHashtags(text);
 
     createPost({
       content: text,
+      formattedContent: formattedContent,
       visibility: 'PUBLIC',
       hashtags: extractedHashtags,
       runAiAnalysis: runAiAnalysis,
@@ -73,19 +85,36 @@ export default function CreatePostBox() {
             height={40}
             className="h-10 w-10 rounded-full"
           />
-          <input
-            type="text"
-            placeholder="What's on your mind?"
-            className="flex-1 rounded-full bg-hover-bg px-4 py-2.5 text-text-primary placeholder:text-text-secondary focus:outline-none"
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              // Hide analyzer when text changes significantly
-              if (showAnalyzer && Math.abs(e.target.value.length - text.length) > 10) {
-                setShowAnalyzer(false);
-              }
-            }}
-          />
+
+          {!showRichEditor ? (
+            <input
+              type="text"
+              placeholder="What's on your mind?"
+              className="flex-1 rounded-full bg-hover-bg px-4 py-2.5 text-text-primary placeholder:text-text-secondary focus:outline-none"
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value);
+                // Extract hashtags
+                const extractedTags = extractHashtags(e.target.value);
+                setHashtags(extractedTags);
+
+                // Hide analyzer when text changes significantly
+                if (showAnalyzer && Math.abs(e.target.value.length - text.length) > 10) {
+                  setShowAnalyzer(false);
+                }
+              }}
+              onFocus={() => setShowRichEditor(true)}
+            />
+          ) : (
+            <div className="flex-1">
+              <RichTextEditor
+                content=""
+                placeholder="What's on your mind?"
+                onChange={handleRichTextChange}
+                autoFocus
+              />
+            </div>
+          )}
         </div>
 
         {/* Error message display */}
@@ -93,6 +122,20 @@ export default function CreatePostBox() {
           <div className="mt-2 p-2 bg-red-100 text-red-700 rounded-md text-sm flex items-center">
             <AlertTriangle className="w-4 h-4 mr-2" />
             {error}
+          </div>
+        )}
+
+        {/* Hashtags display */}
+        {hashtags.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {hashtags.map((tag, index) => (
+              <span
+                key={index}
+                className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full"
+              >
+                #{tag}
+              </span>
+            ))}
           </div>
         )}
 

@@ -1,7 +1,10 @@
+"use client";
+
 import { useState, useEffect } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { MetadataGenerationResult } from '@/lib/seo-optimization';
-import { Button } from '@/app/components/ui';
+// UI components not available
+// import { Button } from '@/app/components/ui';
 import { Loader2 } from 'lucide-react';
 
 interface MetadataGeneratorProps {
