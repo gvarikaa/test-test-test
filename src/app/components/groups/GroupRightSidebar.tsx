@@ -3,17 +3,12 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-
-type Member = {
-  id: string;
-  name: string;
-  image: string;
-  status?: 'online' | 'offline';
-  role?: 'admin' | 'moderator' | 'member';
-};
+import { trpc } from '@/lib/trpc/client';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 
 type GroupRightSidebarProps = {
-  group?: {
+  group: {
     id: string;
     name: string;
     handle: string;
@@ -22,91 +17,80 @@ type GroupRightSidebarProps = {
       members?: number;
     };
   };
-  admins?: Member[];
-  activeMembers?: Member[];
-  recentMembers?: Member[];
   isMember?: boolean;
 };
 
 export default function GroupRightSidebar({
-  group = {
-    id: '1',
-    name: 'Group Name',
-    handle: 'group-name',
-    privacy: 'PUBLIC',
-    _count: { members: 0 }
-  },
-  admins = [],
-  activeMembers = [],
-  recentMembers = [],
+  group,
   isMember = false
 }: GroupRightSidebarProps) {
+  const router = useRouter();
+  const { data: session } = useSession();
   const [showAllMembers, setShowAllMembers] = useState(false);
-  
-  // If no members are provided, generate mock data
-  if (admins.length === 0) {
-    admins = [
-      {
-        id: '1',
-        name: 'Group Admin',
-        image: 'https://ui-avatars.com/api/?name=Group+Admin&background=4F46E5&color=fff',
-        status: 'online',
-        role: 'admin'
-      }
-    ];
-  }
-  
-  if (activeMembers.length === 0) {
-    activeMembers = [
-      {
-        id: '2',
-        name: 'Sarah Johnson',
-        image: 'https://ui-avatars.com/api/?name=Sarah+Johnson&background=059669&color=fff',
-        status: 'online',
-        role: 'moderator'
-      },
-      {
-        id: '3',
-        name: 'Michael Chen',
-        image: 'https://ui-avatars.com/api/?name=Michael+Chen&background=DC2626&color=fff',
-        status: 'online',
-        role: 'member'
-      },
-      {
-        id: '4',
-        name: 'Emma Watson',
-        image: 'https://ui-avatars.com/api/?name=Emma+Watson&background=D97706&color=fff',
-        status: 'offline',
-        role: 'member'
-      },
-      {
-        id: '5',
-        name: 'David Kim',
-        image: 'https://ui-avatars.com/api/?name=David+Kim&background=7C3AED&color=fff',
-        status: 'online',
-        role: 'member'
-      },
-    ];
-  }
-  
-  if (recentMembers.length === 0) {
-    recentMembers = [
-      {
-        id: '6',
-        name: 'New Member 1',
-        image: 'https://ui-avatars.com/api/?name=New+Member&background=2563EB&color=fff',
-        status: 'offline',
-        role: 'member'
-      },
-      {
-        id: '7',
-        name: 'New Member 2',
-        image: 'https://ui-avatars.com/api/?name=New+Member+2&background=9D174D&color=fff',
-        status: 'offline',
-        role: 'member'
-      }
-    ];
-  }
+
+  // Fetch admins (OWNER and ADMIN roles)
+  const { data: adminsData } = trpc.group.getMembers.useQuery({
+    groupId: group.id,
+    limit: 5,
+    role: 'OWNER'
+  }, {
+    enabled: !!group.id,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+
+  const { data: adminData } = trpc.group.getMembers.useQuery({
+    groupId: group.id,
+    limit: 5,
+    role: 'ADMIN'
+  }, {
+    enabled: !!group.id,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+
+  // Fetch moderators
+  const { data: moderatorsData } = trpc.group.getMembers.useQuery({
+    groupId: group.id,
+    limit: 5,
+    role: 'MODERATOR'
+  }, {
+    enabled: !!group.id,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+
+  // Fetch regular members
+  const { data: membersData } = trpc.group.getMembers.useQuery({
+    groupId: group.id,
+    limit: 8,
+    role: 'MEMBER'
+  }, {
+    enabled: !!group.id,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+
+  // Join group mutation
+  const joinGroup = trpc.group.join.useMutation({
+    onSuccess: () => {
+      router.refresh();
+    }
+  });
+
+  const handleJoinGroup = () => {
+    if (group.id) {
+      joinGroup.mutate({ groupId: group.id });
+    }
+  };
+
+  // Combine admins and moderators for leadership section
+  const owners = adminsData?.items || [];
+  const admins = adminData?.items || [];
+  const moderators = moderatorsData?.items || [];
+  const members = membersData?.items || [];
+
+  const leadership = [...owners, ...admins];
+  const regularMembers = [...moderators, ...members];
+
+  const hasLeadership = leadership.length > 0;
+  const hasMembers = regularMembers.length > 0;
 
   return (
     <aside className="sidebar sticky top-14 right-0 h-[calc(100vh-3.5rem)] w-[280px] overflow-y-auto py-3 px-2 no-scrollbar bg-gray-950 backdrop-blur-sm">
@@ -206,142 +190,126 @@ export default function GroupRightSidebar({
             <div className="rounded-xl bg-gray-900/70 p-4 border border-gray-800/40 shadow-md text-center">
               <h3 className="text-base font-semibold text-white mb-2">Join This Group</h3>
               <p className="text-sm text-gray-300 mb-3">Connect with {group._count?.members} members and participate in discussions.</p>
-              <button className="w-full py-2 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-700 text-white text-sm font-medium hover:opacity-90 transition-opacity shadow-md shadow-indigo-900/30">Join Group</button>
+              <button
+                onClick={handleJoinGroup}
+                disabled={joinGroup.isLoading}
+                className={`w-full py-2 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-700 text-white text-sm font-medium hover:opacity-90 transition-opacity shadow-md shadow-indigo-900/30 ${
+                  joinGroup.isLoading ? 'opacity-70 cursor-not-allowed' : ''
+                }`}
+              >
+                {joinGroup.isLoading ? 'Joining...' : 'Join Group'}
+              </button>
             </div>
           </div>
         )}
 
-        {/* Group admins */}
-        <div className="mb-4">
-          <h3 className="flex justify-between items-center px-4 mb-2 text-xs font-medium uppercase text-gray-500">
-            <span>Admins</span>
-            {admins.length > 3 && (
-              <button 
-                onClick={() => setShowAllMembers(!showAllMembers)} 
-                className="text-xs text-gray-400 hover:text-gray-300 transition-colors"
-              >
-                {showAllMembers ? 'Show less' : 'See all'}
-              </button>
-            )}
-          </h3>
-          
-          <ul className="space-y-0.5">
-            {admins.slice(0, showAllMembers ? admins.length : 3).map((admin) => (
-              <li key={admin.id}>
-                <Link
-                  href={`/profile/${admin.id}`}
-                  className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-800/40 transition-colors group"
-                >
-                  <div className="relative">
-                    <div className="h-8 w-8 overflow-hidden rounded-full border border-gray-700/30">
-                      <Image
-                        src={admin.image}
-                        alt={admin.name}
-                        width={32}
-                        height={32}
-                        className="object-cover"
-                        unoptimized
-                      />
-                    </div>
-                    {admin.status === 'online' && (
-                      <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 ring-1 ring-gray-900"></span>
-                    )}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate text-sm font-medium text-gray-200 group-hover:text-white transition-colors">
-                      {admin.name}
-                    </p>
-                    <p className="truncate text-xs text-indigo-400">
-                      Administrator
-                    </p>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-        
-        {/* Active members */}
-        <div className="mb-4">
-          <h3 className="flex justify-between items-center px-4 mb-2 text-xs font-medium uppercase text-gray-500">
-            <span>Active Members</span>
-            {activeMembers.length > 4 && (
-              <button 
-                onClick={() => setShowAllMembers(!showAllMembers)} 
-                className="text-xs text-gray-400 hover:text-gray-300 transition-colors"
-              >
-                {showAllMembers ? 'Show less' : 'See all'}
-              </button>
-            )}
-          </h3>
-          
-          <ul className="space-y-0.5">
-            {activeMembers.slice(0, showAllMembers ? activeMembers.length : 4).map((member) => (
-              <li key={member.id}>
-                <Link 
-                  href={`/profile/${member.id}`} 
-                  className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-800/40 transition-colors group"
-                >
-                  <div className="relative">
-                    <div className="h-8 w-8 overflow-hidden rounded-full">
-                      <Image 
-                        src={member.image} 
-                        alt={member.name} 
-                        width={32} 
-                        height={32} 
-                        className="object-cover"
-                        unoptimized
-                      />
-                    </div>
-                    {member.status === 'online' && (
-                      <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 ring-1 ring-gray-900"></span>
-                    )}
-                  </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate text-sm font-medium text-gray-200 group-hover:text-white transition-colors">
-                      {member.name}
-                    </p>
-                    <p className="truncate text-xs text-gray-400">
-                      {member.role === 'moderator' ? 'Moderator' : 'Member'}
-                    </p>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-        
-        {/* Recent members */}
-        {recentMembers.length > 0 && (
+        {/* Group leadership */}
+        {hasLeadership && (
           <div className="mb-4">
-            <h3 className="px-4 mb-2 text-xs font-medium uppercase text-gray-500">New Members</h3>
-            
+            <h3 className="flex justify-between items-center px-4 mb-2 text-xs font-medium uppercase text-gray-500">
+              <span>Group Leadership</span>
+              {leadership.length > 3 && (
+                <button
+                  onClick={() => setShowAllMembers(!showAllMembers)}
+                  className="text-xs text-gray-400 hover:text-gray-300 transition-colors"
+                >
+                  {showAllMembers ? 'Show less' : 'See all'}
+                </button>
+              )}
+            </h3>
+
             <ul className="space-y-0.5">
-              {recentMembers.map((member) => (
+              {leadership.slice(0, showAllMembers ? leadership.length : 3).map((member) => (
                 <li key={member.id}>
-                  <Link 
-                    href={`/profile/${member.id}`} 
+                  <Link
+                    href={`/profile/${member.user.id}`}
                     className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-800/40 transition-colors group"
                   >
-                    <div className="h-8 w-8 overflow-hidden rounded-full">
-                      <Image 
-                        src={member.image} 
-                        alt={member.name} 
-                        width={32} 
-                        height={32} 
-                        className="object-cover"
-                        unoptimized
-                      />
+                    <div className="relative">
+                      <div className="h-8 w-8 overflow-hidden rounded-full border border-gray-700/30">
+                        {member.user.image ? (
+                          <Image
+                            src={member.user.image}
+                            alt={member.user.name || ''}
+                            width={32}
+                            height={32}
+                            className="object-cover"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-indigo-700">
+                            <span className="text-xs font-bold text-white">
+                              {(member.user.name || 'U').charAt(0)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    
+
                     <div className="flex-1 min-w-0">
                       <p className="truncate text-sm font-medium text-gray-200 group-hover:text-white transition-colors">
-                        {member.name}
+                        {member.user.name}
+                      </p>
+                      <p className="truncate text-xs text-indigo-400">
+                        {member.role === 'OWNER' ? 'Owner' : 'Administrator'}
+                      </p>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Regular members */}
+        {hasMembers && (
+          <div className="mb-4">
+            <h3 className="flex justify-between items-center px-4 mb-2 text-xs font-medium uppercase text-gray-500">
+              <span>Members</span>
+              {regularMembers.length > 4 && (
+                <button
+                  onClick={() => setShowAllMembers(!showAllMembers)}
+                  className="text-xs text-gray-400 hover:text-gray-300 transition-colors"
+                >
+                  {showAllMembers ? 'Show less' : 'See all'}
+                </button>
+              )}
+            </h3>
+
+            <ul className="space-y-0.5">
+              {regularMembers.slice(0, showAllMembers ? regularMembers.length : 4).map((member) => (
+                <li key={member.id}>
+                  <Link
+                    href={`/profile/${member.user.id}`}
+                    className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-800/40 transition-colors group"
+                  >
+                    <div className="relative">
+                      <div className="h-8 w-8 overflow-hidden rounded-full">
+                        {member.user.image ? (
+                          <Image
+                            src={member.user.image}
+                            alt={member.user.name || ''}
+                            width={32}
+                            height={32}
+                            className="object-cover"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-indigo-700">
+                            <span className="text-xs font-bold text-white">
+                              {(member.user.name || 'U').charAt(0)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <p className="truncate text-sm font-medium text-gray-200 group-hover:text-white transition-colors">
+                        {member.user.name}
                       </p>
                       <p className="truncate text-xs text-gray-400">
-                        Joined recently
+                        {member.role === 'MODERATOR' ? 'Moderator' : 'Member'}
                       </p>
                     </div>
                   </Link>
@@ -353,7 +321,7 @@ export default function GroupRightSidebar({
         
         {/* View all members button */}
         <div className="px-4 mt-4">
-          <Link 
+          <Link
             href={`/groups/${group.handle}/members`}
             className="flex items-center justify-center gap-2 w-full rounded-lg bg-gray-800/60 border border-gray-700/40 py-2 px-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
           >
@@ -363,6 +331,25 @@ export default function GroupRightSidebar({
             View all {group._count?.members || 0} members
           </Link>
         </div>
+
+        {/* Admin access - Join requests */}
+        {isMember && (leadership.length > 0 && (
+          leadership[0].user.id === session?.user?.id ||
+          leadership.some(member => member.role === 'ADMIN' && member.user.id === session?.user?.id)
+        )) && (
+          <div className="px-4 mt-2">
+            <Link
+              href={`/groups/${group.handle}/requests`}
+              className="flex items-center justify-center gap-2 w-full rounded-lg bg-indigo-800/30 border border-indigo-700/30 py-2 px-3 text-sm text-indigo-300 hover:bg-indigo-800/40 hover:text-white transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="size-4">
+                <path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
+                <path fillRule="evenodd" d="M.664 10.59a1.651 1.651 0 010-1.186A10.004 10.004 0 0110 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0110 17c-4.257 0-7.893-2.66-9.336-6.41zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+              </svg>
+              Review Join Requests
+            </Link>
+          </div>
+        )}
         
         {/* Group privacy info */}
         <div className="mt-6 px-4">

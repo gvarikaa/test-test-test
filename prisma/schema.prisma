@@ -65,6 +65,11 @@ model User {
   groupReports                    GroupReport[]                    @relation("ReportCreator")
   groupReportedContent            GroupReport[]                    @relation("ReportedUser")
   healthProfile                   HealthProfile?
+  messageReactions                MessageReaction[]
+  messageMentions                 MessageMention[]
+  chatPollVotes                   ChatPollVote[]
+  chatBotCreator                  ChatBot[]
+  chatPreferences                 UserChatPreference?
   interests                       UserInterest[]
   preferences                     UserPreference[]
   receivedMessages                Message[]                        @relation("MessageReceiver")
@@ -310,25 +315,55 @@ model Friendship {
 }
 
 model Chat {
-  id           String            @id @default(cuid())
-  name         String?
-  isGroup      Boolean           @default(false)
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  participants ChatParticipant[]
-  messages     Message[]
+  id               String            @id @default(cuid())
+  name             String?
+  isGroup          Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  description      String?           @db.Text
+  image            String?
+  coverImage       String?
+  isPinned         Boolean           @default(false)
+  isArchived       Boolean           @default(false)
+  lastMessageAt    DateTime?
+  themeColor       String?
+  customBackground String?
+  participants     ChatParticipant[]
+  messages         Message[]
+  settings         ChatSettings?
+  threads          ChatThread[]
+  calls            Call[]
+  sharedMedia      SharedMedia[]
+  polls            ChatPoll[]
+  pinned           PinnedMessage[]
+  joinCode         String?           @unique
 }
 
 model ChatParticipant {
-  id                String   @id @default(cuid())
-  role              ChatRole @default(MEMBER)
-  createdAt         DateTime @default(now())
-  chatId            String
-  userId            String
-  lastReadMessageId String?
-  chat              Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  lastReadMessage   Message? @relation(fields: [lastReadMessageId], references: [id])
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                  String            @id @default(cuid())
+  role                ChatRole          @default(MEMBER)
+  createdAt           DateTime          @default(now())
+  chatId              String
+  userId              String
+  lastReadMessageId   String?
+  nickname            String?
+  isAdmin             Boolean           @default(false)
+  isBlocked           Boolean           @default(false)
+  isMuted             Boolean           @default(false)
+  muteUntil           DateTime?
+  notificationSetting String            @default("ALL")
+  isTyping            Boolean           @default(false)
+  lastActiveAt        DateTime?
+  joinedVia           String?
+  invitedBy           String?
+  metaData            Json?
+  hasLeftChat         Boolean           @default(false)
+  leftAt              DateTime?
+  chat                Chat              @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  lastReadMessage     Message?          @relation(fields: [lastReadMessageId], references: [id])
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pollVotes           ChatPollVote[]
+  callParticipations  CallParticipant[]
 
   @@unique([chatId, userId])
   @@index([chatId])
@@ -336,24 +371,44 @@ model ChatParticipant {
 }
 
 model Message {
-  id         String            @id @default(cuid())
-  content    String?           @db.Text
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
-  isDeleted  Boolean           @default(false)
-  expiresAt  DateTime?
-  chatId     String
-  senderId   String
-  receiverId String?
-  readBy     ChatParticipant[]
-  media      Media[]
-  chat       Chat              @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  receiver   User?             @relation("MessageReceiver", fields: [receiverId], references: [id])
-  sender     User              @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  id               String            @id @default(cuid())
+  content          String?           @db.Text
+  translatedText   String?           @db.Text
+  sourceLanguage   String?
+  targetLanguage   String?
+  messageType      MessageType       @default(TEXT)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  isDeleted        Boolean           @default(false)
+  expiresAt        DateTime?
+  chatId           String
+  senderId         String
+  receiverId       String?
+  isAI             Boolean           @default(false)
+  reactions        MessageReaction[]
+  readBy           ChatParticipant[]
+  media            Media[]
+  replyToId        String?
+  replyTo          Message?          @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies          Message[]         @relation("MessageReplies")
+  isForwarded      Boolean           @default(false)
+  originalChatId   String?
+  originalSenderId String?
+  mentions         MessageMention[]
+  callRecord       CallRecord?
+  voiceTranscript  String?           @db.Text
+  waveform         String?
+  chat             Chat              @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  receiver         User?             @relation("MessageReceiver", fields: [receiverId], references: [id])
+  sender           User              @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  pollId           String?           @unique
+  poll             ChatPoll?         @relation(fields: [pollId], references: [id])
 
   @@index([chatId])
   @@index([senderId])
   @@index([receiverId])
+  @@index([replyToId])
+  @@index([messageType])
 }
 
 model Notification {
@@ -1986,8 +2041,12 @@ enum FriendshipStatus {
 }
 
 enum ChatRole {
+  OWNER
   ADMIN
+  MODERATOR
   MEMBER
+  GUEST
+  BOT
 }
 
 enum NotificationType {
@@ -2109,4 +2168,443 @@ enum PostType {
   POLL
   AUDIO
   DOCUMENT
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  LOCATION
+  CONTACT
+  SYSTEM
+  VOICE_CALL
+  VIDEO_CALL
+  POLL
+  REPLY
+  FORWARDED
+  WATCH_TOGETHER
+  TRIP_PLAN
+  HANDWRITING
+  AI_GENERATED
+  VOICE_MESSAGE
+  STICKER
+}
+
+enum CallType {
+  AUDIO
+  VIDEO
+  GROUP_AUDIO
+  GROUP_VIDEO
+  SCREEN_SHARE
+}
+
+enum CallStatus {
+  RINGING
+  ONGOING
+  ENDED
+  MISSED
+  REJECTED
+  BUSY
+  FAILED
+}
+
+enum TranscriptionQuality {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum PollStatus {
+  ACTIVE
+  ENDED
+  SCHEDULED
+}
+
+enum SharedMediaType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+  AUDIO
+  LINK
+  LOCATION
+}
+
+enum ChatFeatureStatus {
+  ENABLED
+  DISABLED
+  RESTRICTED
+}
+
+// Chat system models for enhanced functionality
+
+model ChatSettings {
+  id                      String   @id @default(cuid())
+  chatId                  String   @unique
+  defaultLanguage         String?  @default("en")
+  translationEnabled      Boolean  @default(false)
+  autoTranslateEnabled    Boolean  @default(false)
+  mediaAutoDownload       Boolean  @default(true)
+  notificationSound       String?
+  messageSound            String?
+  callSound               String?
+  theme                   String?  @default("default")
+  backgroundColor         String?
+  messageBoxColor         String?
+  fontColor               String?
+  fontSize                Int?     @default(14)
+  readReceiptsEnabled     Boolean  @default(true)
+  typingIndicatorsEnabled Boolean  @default(true)
+  mediaQuality            String?  @default("auto")
+  autoArchiveAfterDays    Int?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  enabledFeatures         Json?
+  messageRetentionDays    Int?     @default(365)
+  e2eEncryptionEnabled    Boolean  @default(false)
+  enableVoiceCalls        Boolean  @default(true)
+  enableVideoCalls        Boolean  @default(true)
+  enableGroupCalls        Boolean  @default(true)
+  enableScreenSharing     Boolean  @default(true)
+  enableMessageThreads    Boolean  @default(true)
+  enableReactions         Boolean  @default(true)
+  enablePolls             Boolean  @default(true)
+  enableWatchTogether     Boolean  @default(true)
+  enableHandwriting       Boolean  @default(true)
+  enableTripPlanning      Boolean  @default(true)
+  enableAIAssistant       Boolean  @default(true)
+  enableSubtitles         Boolean  @default(true)
+  allowBots               Boolean  @default(false)
+  chat                    Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+}
+
+model ChatThread {
+  id               String    @id @default(cuid())
+  title            String?
+  chatId           String
+  parentMessageId  String?   @unique
+  createdBy        String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  isArchived       Boolean   @default(false)
+  lastActivityAt   DateTime?
+  participantCount Int       @default(0)
+  messageCount     Int       @default(0)
+  color            String?
+  emoji            String?
+  chat             Chat      @relation(fields: [chatId], references: [id], onDelete: Cascade)
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  emoji     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  messageId String
+  userId    String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+  @@index([userId])
+}
+
+model MessageMention {
+  id         String   @id @default(cuid())
+  messageId  String
+  userId     String
+  startIndex Int?
+  endIndex   Int?
+  createdAt  DateTime @default(now())
+  message    Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([userId])
+}
+
+model PinnedMessage {
+  id        String    @id @default(cuid())
+  messageId String    @unique
+  chatId    String
+  pinnedBy  String
+  pinnedAt  DateTime  @default(now())
+  expiresAt DateTime?
+  chat      Chat      @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+}
+
+model SharedMedia {
+  id           String          @id @default(cuid())
+  chatId       String
+  messageId    String?
+  userId       String
+  mediaType    SharedMediaType
+  url          String
+  thumbnailUrl String?
+  fileName     String?
+  fileSize     Int?
+  duration     Int?
+  width        Int?
+  height       Int?
+  createdAt    DateTime        @default(now())
+  chat         Chat            @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+  @@index([userId])
+  @@index([mediaType])
+}
+
+model ChatPoll {
+  id            String           @id @default(cuid())
+  question      String
+  options       ChatPollOption[]
+  votes         ChatPollVote[]
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  createdBy     String
+  chatId        String
+  status        PollStatus       @default(ACTIVE)
+  expiresAt     DateTime?
+  allowMultiple Boolean          @default(false)
+  isAnonymous   Boolean          @default(false)
+  message       Message?
+  chat          Chat             @relation(fields: [chatId], references: [id], onDelete: Cascade)
+}
+
+model ChatPollOption {
+  id       String         @id @default(cuid())
+  pollId   String
+  text     String
+  imageUrl String?
+  position Int
+  votes    ChatPollVote[]
+  poll     ChatPoll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  @@index([pollId])
+}
+
+model ChatPollVote {
+  id            String          @id @default(cuid())
+  pollId        String
+  optionId      String
+  userId        String
+  participantId String
+  createdAt     DateTime        @default(now())
+  option        ChatPollOption  @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  poll          ChatPoll        @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  participant   ChatParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, participantId, optionId])
+  @@index([pollId])
+  @@index([optionId])
+  @@index([userId])
+  @@index([participantId])
+}
+
+model Call {
+  id           String            @id @default(cuid())
+  type         CallType
+  status       CallStatus
+  chatId       String
+  initiatedBy  String
+  startedAt    DateTime          @default(now())
+  endedAt      DateTime?
+  duration     Int? // Duration in seconds
+  hasRecording Boolean           @default(false)
+  recordingUrl String?
+  participants CallParticipant[]
+  callRecords  CallRecord[]
+  chat         Chat              @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+  @@index([initiatedBy])
+  @@index([status])
+}
+
+model CallParticipant {
+  id                String          @id @default(cuid())
+  callId            String
+  participantId     String
+  joinedAt          DateTime        @default(now())
+  leftAt            DateTime?
+  deviceInfo        String?
+  hasVideo          Boolean         @default(false)
+  hasAudio          Boolean         @default(true)
+  isScreenSharing   Boolean         @default(false)
+  pinned            Boolean         @default(false)
+  connectionQuality String?         @default("good")
+  call              Call            @relation(fields: [callId], references: [id], onDelete: Cascade)
+  participant       ChatParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@index([callId])
+  @@index([participantId])
+}
+
+model CallRecord {
+  id                String                @id @default(cuid())
+  callId            String
+  messageId         String                @unique
+  durationSeconds   Int
+  participantCount  Int
+  recordingUrl      String?
+  transcriptUrl     String?
+  transcriptText    String?               @db.Text
+  transcriptQuality TranscriptionQuality?
+  aiSummary         String?               @db.Text
+  summaryKeyPoints  Json?
+  hasScreenshare    Boolean               @default(false)
+  callType          CallType
+  createdAt         DateTime              @default(now())
+  call              Call                  @relation(fields: [callId], references: [id], onDelete: Cascade)
+  message           Message               @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([callId])
+}
+
+model WatchTogetherSession {
+  id              String    @id @default(cuid())
+  chatId          String
+  createdBy       String
+  mediaUrl        String
+  mediaTitle      String?
+  mediaThumbnail  String?
+  mediaType       String    @default("video")
+  mediaSource     String    @default("youtube")
+  mediaLengthSec  Int?
+  currentPosition Int       @default(0)
+  isPlaying       Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  endedAt         DateTime?
+  participants    Json?
+
+  @@index([chatId])
+  @@index([createdBy])
+}
+
+model TripPlan {
+  id                String    @id @default(cuid())
+  chatId            String
+  createdBy         String
+  destination       String
+  startDate         DateTime?
+  endDate           DateTime?
+  budget            Decimal?  @db.Decimal(10, 2)
+  currency          String?   @default("USD")
+  participants      Json?
+  description       String?   @db.Text
+  activities        Json?
+  accommodation     Json?
+  transportation    Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  status            String    @default("planning")
+  aiGenerated       Boolean   @default(false)
+  sharedCalendarUrl String?
+  locationLat       Float?
+  locationLng       Float?
+
+  @@index([chatId])
+  @@index([createdBy])
+}
+
+model HandwritingMessage {
+  id              String   @id @default(cuid())
+  messageId       String   @unique
+  strokes         Json // Stores stroke data for the handwriting
+  backgroundColor String?
+  penColor        String?  @default("#000000")
+  penWidth        Int?     @default(2)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  convertedText   String?  @db.Text
+
+  @@index([messageId])
+}
+
+model ChatBot {
+  id              String   @id @default(cuid())
+  name            String
+  displayName     String
+  avatarUrl       String?
+  description     String?  @db.Text
+  creatorUserId   String?
+  isVerified      Boolean  @default(false)
+  isPublic        Boolean  @default(false)
+  capabilities    Json? // Array of capabilities like ["translation", "trivia", "reminders"]
+  commands        Json? // Available commands for this bot
+  triggerKeywords Json? // Keywords that trigger the bot
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  aiModel         String?  @default("gemini-pro")
+  systemPrompt    String?  @db.Text
+  isEnabled       Boolean  @default(true)
+  metadata        Json?
+  creator         User?    @relation(fields: [creatorUserId], references: [id], onDelete: SetNull)
+
+  @@index([creatorUserId])
+}
+
+model ChatBotInvocation {
+  id              String   @id @default(cuid())
+  chatId          String
+  messageId       String?
+  botId           String
+  command         String?
+  parameters      Json?
+  result          String?  @db.Text
+  isSuccess       Boolean
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+  executionTimeMs Int?
+  tokensUsed      Int?
+
+  @@index([chatId])
+  @@index([botId])
+  @@index([messageId])
+}
+
+model TranslationCache {
+  id             String    @id @default(cuid())
+  sourceText     String    @db.Text
+  sourceLanguage String
+  targetLanguage String
+  translatedText String    @db.Text
+  createdAt      DateTime  @default(now())
+  expiresAt      DateTime?
+  tokenCount     Int       @default(0)
+  provider       String    @default("gemini")
+  quality        String?
+  contextId      String? // For contextual translations (e.g., chat session ID)
+
+  @@index([sourceLanguage, targetLanguage])
+  @@index([contextId])
+}
+
+model UserChatPreference {
+  id                       String   @id @default(cuid())
+  userId                   String   @unique
+  preferredLanguage        String?  @default("en")
+  autoTranslationEnabled   Boolean  @default(false)
+  translateTo              String? // Target language code
+  defaultNotificationSound String?
+  subtitlesEnabled         Boolean  @default(true)
+  subtitlesLanguage        String?  @default("en")
+  subtitlesSize            Int?     @default(16)
+  subtitlesColor           String?  @default("#FFFFFF")
+  subtitlesBackgroundColor String?  @default("#000000")
+  subtitlesPosition        String?  @default("bottom")
+  voiceCallTranscription   Boolean  @default(true)
+  handwritingRecognition   Boolean  @default(true)
+  botEnabled               Boolean  @default(true)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

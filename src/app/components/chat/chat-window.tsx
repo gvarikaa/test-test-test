@@ -209,7 +209,7 @@ export function ChatWindow({
 
   if (isMinimized) {
     return (
-      <div className="fixed bottom-0 right-4 w-72 bg-header-bg border border-border-color rounded-t-lg shadow-lg">
+      <div className="fixed bottom-0 right-4 w-72 bg-header-bg border border-border-color rounded-t-lg shadow-lg z-[9999]" style={{ zIndex: 9999 }}>
         <div className="p-3 border-b border-border-color flex justify-between items-center cursor-pointer bg-header-bg" onClick={onMaximize}>
           <div className="flex items-center">
             <div className="relative">
@@ -252,7 +252,7 @@ export function ChatWindow({
   }
 
   return (
-    <div className="fixed bottom-0 right-4 w-80 h-96 bg-card-bg border border-border-color rounded-t-lg shadow-lg flex flex-col z-10">
+    <div className="fixed bottom-0 right-4 w-80 h-96 bg-card-bg border border-border-color rounded-t-lg shadow-lg flex flex-col z-[9999]" style={{ zIndex: 9999 }}>
       {/* Chat header */}
       <div className="p-3 border-b border-border-color flex justify-between items-center bg-header-bg">
         <div className="flex items-center">

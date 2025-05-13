@@ -10,6 +10,7 @@ import { RichTextContent } from '../posts/rich-text';
 import { sanitizeString, sanitizeUrl } from '@/lib/utils/sanitizers';
 import { loggers } from '@/lib/utils/debug';
 import { ErrorBoundary } from '@/components/error-boundary';
+import ChatButton from '../chat/chat-button';
 
 interface Category {
   id: string;
@@ -237,49 +238,58 @@ export default function Post({ post }: PostProps) {
               className="h-10 w-10 rounded-full relative z-10 ring-2 ring-gray-900 p-0.5 group-hover:scale-105 transition-transform duration-300"
             />
           </Link>
-          <div>
-            <Link
-              href={`/profile/${post.user.id}`}
-              className={`font-semibold ${THEME.textPrimary} hover:text-indigo-300 transition-colors duration-200`}
-            >
-              {sanitizedPost.user.name || 'Unknown User'}
-            </Link>
-            <div className={`flex items-center gap-1 text-xs ${THEME.textSecondary}`}>
-              <span>{new Date(post.createdAt).toLocaleDateString('en-US', {
-                day: 'numeric',
-                month: 'short',
-                year: 'numeric',
-              })}</span>
-              <span className="text-indigo-400/60">•</span>
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/profile/${post.user.id}`}
+                  className={`font-semibold ${THEME.textPrimary} hover:text-indigo-300 transition-colors duration-200`}
+                >
+                  {sanitizedPost.user.name || 'Unknown User'}
+                </Link>
 
-              {/* Show the post visibility status with an icon */}
-              {post.visibility === 'PUBLIC' ? (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-3 text-indigo-400" title="Public">
-                  <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
-                  <path fillRule="evenodd" d="M1.323 11.447C2.811 6.976 7.028 3.75 12.001 3.75c4.97 0 9.185 3.223 10.675 7.69.12.362.12.752 0 1.113-1.487 4.471-5.705 7.697-10.677 7.697-4.97 0-9.186-3.223-10.675-7.69a1.762 1.762 0 010-1.113zM17.25 12a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" clipRule="evenodd" />
-                </svg>
-              ) : post.visibility === 'PRIVATE' ? (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-3 text-indigo-400" title="Private">
-                  <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clipRule="evenodd" />
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-3 text-indigo-400" title="Friends">
-                  <path fillRule="evenodd" d="M8.25 6.75a3.75 3.75 0 117.5 0 3.75 3.75 0 01-7.5 0zM15.75 9.75a3 3 0 116 0 3 3 0 01-6 0zM2.25 9.75a3 3 0 116 0 3 3 0 01-6 0zM6.31 15.117A6.745 6.745 0 0112 12a6.745 6.745 0 016.709 7.498.75.75 0 01-.372.568A12.696 12.696 0 0112 21.75c-2.305 0-4.47-.612-6.337-1.684a.75.75 0 01-.372-.568 6.787 6.787 0 011.019-4.38z" clipRule="evenodd" />
-                  <path d="M5.082 14.254a8.287 8.287 0 00-1.308 5.135 9.687 9.687 0 01-1.764-.44l-.115-.04a.563.563 0 01-.373-.487l-.01-.121a3.75 3.75 0 013.57-4.047zM20.226 19.389a8.287 8.287 0 00-1.308-5.135 3.75 3.75 0 013.57 4.047l-.01.121a.563.563 0 01-.373.486l-.115.04c-.567.2-1.156.349-1.764.441z" />
-                </svg>
+                {/* Chat button - only show if not current user */}
+                {session?.user?.id !== post.user.id && (
+                  <ChatButton userId={post.user.id} size="sm" className="bg-indigo-600/80 hover:bg-indigo-500" />
+                )}
+              </div>
+              <div className={`flex items-center gap-1 text-xs ${THEME.textSecondary}`}>
+                <span>{new Date(post.createdAt).toLocaleDateString('en-US', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })}</span>
+                <span className="text-indigo-400/60">•</span>
+
+                {/* Show the post visibility status with an icon */}
+                {post.visibility === 'PUBLIC' ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-3 text-indigo-400" title="Public">
+                    <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+                    <path fillRule="evenodd" d="M1.323 11.447C2.811 6.976 7.028 3.75 12.001 3.75c4.97 0 9.185 3.223 10.675 7.69.12.362.12.752 0 1.113-1.487 4.471-5.705 7.697-10.677 7.697-4.97 0-9.186-3.223-10.675-7.69a1.762 1.762 0 010-1.113zM17.25 12a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" clipRule="evenodd" />
+                  </svg>
+                ) : post.visibility === 'PRIVATE' ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-3 text-indigo-400" title="Private">
+                    <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-3 text-indigo-400" title="Friends">
+                    <path fillRule="evenodd" d="M8.25 6.75a3.75 3.75 0 117.5 0 3.75 3.75 0 01-7.5 0zM15.75 9.75a3 3 0 116 0 3 3 0 01-6 0zM2.25 9.75a3 3 0 116 0 3 3 0 01-6 0zM6.31 15.117A6.745 6.745 0 0112 12a6.745 6.745 0 016.709 7.498.75.75 0 01-.372.568A12.696 12.696 0 0112 21.75c-2.305 0-4.47-.612-6.337-1.684a.75.75 0 01-.372-.568 6.787 6.787 0 011.019-4.38z" clipRule="evenodd" />
+                    <path d="M5.082 14.254a8.287 8.287 0 00-1.308 5.135 9.687 9.687 0 01-1.764-.44l-.115-.04a.563.563 0 01-.373-.487l-.01-.121a3.75 3.75 0 013.57-4.047zM20.226 19.389a8.287 8.287 0 00-1.308-5.135 3.75 3.75 0 013.57 4.047l-.01.121a.563.563 0 01-.373.486l-.115.04c-.567.2-1.156.349-1.764.441z" />
+                  </svg>
+                )}
+              </div>
+
+              {/* Display post categories/topics if available */}
+              {post.categories && post.categories.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {post.categories.map((category, idx) => (
+                    <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-indigo-900/40 text-indigo-300 border border-indigo-700/30">
+                      #{category.name || category}
+                    </span>
+                  ))}
+                </div>
               )}
             </div>
-
-            {/* Display post categories/topics if available */}
-            {post.categories && post.categories.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-1">
-                {post.categories.map((category, idx) => (
-                  <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-indigo-900/40 text-indigo-300 border border-indigo-700/30">
-                    #{category.name || category}
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
         </div>
         <button className="rounded-full p-2 hover:bg-gray-800/50 text-gray-400 hover:text-gray-200 transition-colors duration-200">

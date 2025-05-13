@@ -1,9 +1,10 @@
-import { PrismaClient, Visibility, MediaType } from '@prisma/client';
-import { hash } from 'bcrypt';
-import { seedReelData } from './seeds/reels.js';
-import { seedEvents } from './seeds/events';
-import { seedEventCategories } from './seeds/event-categories';
-import { seedSubscriptionPlans } from './seeds/subscription-plans';
+// Convert TypeScript seed.ts to JavaScript seed.js
+const { PrismaClient, Visibility, MediaType } = require('@prisma/client');
+const { hash } = require('bcrypt');
+const { seedReelData } = require('./seeds/reels.js');
+const { seedEvents } = require('./seeds/events');
+const { seedEventCategories } = require('./seeds/event-categories');
+const { seedSubscriptionPlans } = require('./seeds/subscription-plans');
 
 const prisma = new PrismaClient();
 
@@ -225,7 +226,7 @@ async function main() {
   console.log('Creating chats between users...');
 
   // Function to create a chat between two users with improved error handling and validation
-  async function createChatBetweenUsers(user1Id: string, user2Id: string, user1Name: string, user2Name: string) {
+  async function createChatBetweenUsers(user1Id, user2Id, user1Name, user2Name) {
     try {
       if (user1Id === user2Id) {
         console.log(`Skipping self-chat for ${user1Name}`);
@@ -297,7 +298,7 @@ async function main() {
 
       // Add sample messages if they don't exist or add more conversation if minimal
       const existingMessages = chat.messages || [];
-
+      
       if (existingMessages.length === 0) {
         // Create a natural conversation flow with multiple messages
         const messages = [
@@ -341,13 +342,13 @@ async function main() {
         for (const message of messages) {
           await prisma.message.create({ data: message });
         }
-
+        
         // Update the lastMessageAt field on the chat
         await prisma.chat.update({
           where: { id: chat.id },
           data: { lastMessageAt: new Date(Date.now() - 3600000 * 2) }
         });
-
+        
         console.log(`Added conversation between ${user1Name} and ${user2Name}`);
       } else if (existingMessages.length < 3) {
         // Add a few more messages if there are only a couple
@@ -374,17 +375,17 @@ async function main() {
             createdAt: new Date(Date.now() - 3600000 * 1) // 1 hour ago
           }
         ];
-
+        
         for (const message of additionalMessages) {
           await prisma.message.create({ data: message });
         }
-
+        
         // Update the lastMessageAt field
         await prisma.chat.update({
           where: { id: chat.id },
           data: { lastMessageAt: new Date(Date.now() - 3600000 * 1) }
         });
-
+        
         console.log(`Added supplementary messages between ${user1Name} and ${user2Name}`);
       } else {
         console.log(`Conversation between ${user1Name} and ${user2Name} already exists with ${existingMessages.length} messages`);
@@ -394,7 +395,7 @@ async function main() {
       for (const participant of chat.participants) {
         await prisma.chatParticipant.update({
           where: { id: participant.id },
-          data: {
+          data: { 
             lastActiveAt: new Date(Date.now() - Math.floor(Math.random() * 3600000)), // Random activity within last hour
             lastReadMessageId: existingMessages.length > 0 ? existingMessages[0].id : undefined
           }
@@ -419,10 +420,10 @@ async function main() {
   for (const pair of userPairs) {
     await createChatBetweenUsers(pair.user1.id, pair.user2.id, pair.name1, pair.name2);
   }
-
+  
   // Create a group chat with all users
   console.log('Creating a group chat with all users...');
-
+  
   try {
     const existingGroupChat = await prisma.chat.findFirst({
       where: {
@@ -433,7 +434,7 @@ async function main() {
         participants: true,
       },
     });
-
+    
     if (!existingGroupChat) {
       const groupChat = await prisma.chat.create({
         data: {
@@ -475,7 +476,7 @@ async function main() {
           participants: true,
         },
       });
-
+      
       // Add some group messages
       const groupMessages = [
         {
@@ -507,17 +508,17 @@ async function main() {
           createdAt: new Date(Date.now() - 43200000), // 12 hours ago
         },
       ];
-
+      
       for (const message of groupMessages) {
         await prisma.message.create({ data: message });
       }
-
+      
       // Update the lastMessageAt field
       await prisma.chat.update({
         where: { id: groupChat.id },
         data: { lastMessageAt: new Date(Date.now() - 43200000) }
       });
-
+      
       console.log('Created group chat with all users');
     } else {
       console.log('Group chat already exists, skipping creation...');

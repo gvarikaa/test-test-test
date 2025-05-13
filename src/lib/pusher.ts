@@ -44,6 +44,34 @@ export enum PusherEvents {
   TYPING = 'typing',
   STOP_TYPING = 'stop-typing',
 
+  // Call events
+  CALL_STARTED = 'call-started',
+  CALL_ENDED = 'call-ended',
+  CALL_REJECTED = 'call-rejected',
+  CALL_PARTICIPANT_JOINED = 'call-participant-joined',
+  CALL_PARTICIPANT_LEFT = 'call-participant-left',
+  INCOMING_CALL = 'incoming-call',
+  CALL_STATE_CHANGED = 'call-state-changed',
+
+  // Translation events
+  MESSAGE_TRANSLATED = 'message-translated',
+
+  // Thread events
+  THREAD_CREATED = 'thread-created',
+  THREAD_UPDATED = 'thread-updated',
+
+  // Poll events
+  NEW_POLL = 'new-poll',
+  POLL_VOTE_UPDATED = 'poll-vote-updated',
+  POLL_ENDED = 'poll-ended',
+
+  // Watch Together events
+  WATCH_TOGETHER_STARTED = 'watch-together-started',
+  WATCH_TOGETHER_UPDATED = 'watch-together-updated',
+  WATCH_TOGETHER_ENDED = 'watch-together-ended',
+  WATCH_TOGETHER_JOINED = 'watch-together-joined',
+  WATCH_TOGETHER_LEFT = 'watch-together-left',
+
   // Presence events
   USER_ONLINE = 'user-online',
   USER_OFFLINE = 'user-offline',

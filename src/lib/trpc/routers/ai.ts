@@ -276,6 +276,12 @@ export const aiRouter = router({
     }),
   // Get the user's token limit and current usage
   getTokenLimit: protectedProcedure
+    .input(
+      z.object({
+        operationType: z.string().optional(),
+        variation: z.string().optional()
+      }).optional().default({})
+    )
     .query(async ({ ctx }) => {
       try {
         const userId = ctx.session.user.id;

@@ -258,7 +258,10 @@ export default function FacebookHeader() {
         </button>
 
         {/* Messenger */}
-        <button className={`relative flex h-9 w-9 items-center justify-center rounded-xl ${THEME.iconBg} hover:bg-gray-700/60 transition-all duration-200 text-gray-300 hover:text-indigo-300 active:scale-95 group`}>
+        <Link
+          href="/messages"
+          className={`relative flex h-9 w-9 items-center justify-center rounded-xl ${THEME.iconBg} hover:bg-gray-700/60 transition-all duration-200 text-gray-300 hover:text-indigo-300 active:scale-95 group`}
+        >
           {/* Subtle border glow on hover */}
           <div className="absolute inset-0 opacity-0 group-hover:opacity-100 border border-indigo-500/30 rounded-xl transition-opacity duration-300"></div>
 
@@ -275,7 +278,7 @@ export default function FacebookHeader() {
 
           {/* Animated ping effect */}
           <span className="absolute inset-0 rounded-xl bg-indigo-500/10 animate-ping opacity-75"></span>
-        </button>
+        </Link>
 
         {/* Notifications */}
         <button className={`relative flex h-9 w-9 items-center justify-center rounded-xl ${THEME.iconBg} hover:bg-gray-700/60 transition-all duration-200 text-gray-300 hover:text-indigo-300 active:scale-95 group`}>

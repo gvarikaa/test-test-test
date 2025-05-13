@@ -293,11 +293,15 @@ export default function GroupLeftSidebar({
         {/* Member actions */}
         {!isMember ? (
           <div className="mt-4 px-4">
-            <button
-              className="w-full rounded-lg bg-gradient-to-r from-indigo-600 to-purple-700 px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 transition-opacity shadow-md shadow-indigo-900/20"
+            <Link
+              href={`/groups/${group.handle}`}
+              className="w-full rounded-lg bg-gradient-to-r from-indigo-600 to-purple-700 px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 transition-opacity shadow-md shadow-indigo-900/20 flex items-center justify-center"
             >
               Join Group
-            </button>
+            </Link>
+            <p className="text-xs text-gray-400 mt-2 text-center">
+              Join to see posts and interact with members
+            </p>
           </div>
         ) : (
           <>
@@ -338,11 +342,12 @@ export default function GroupLeftSidebar({
         {/* Leave group action */}
         {isMember && (
           <div className="mt-auto pt-6 px-4">
-            <button
-              className="w-full rounded-lg border border-red-800/30 bg-red-900/20 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-900/30 transition-colors"
+            <Link
+              href={`/groups/${group.handle}`}
+              className="w-full rounded-lg border border-red-800/30 bg-red-900/20 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-900/30 transition-colors flex items-center justify-center"
             >
               Leave Group
-            </button>
+            </Link>
           </div>
         )}
 

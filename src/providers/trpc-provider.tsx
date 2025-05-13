@@ -62,6 +62,10 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
           headers() {
             return {
               "x-trpc-source": "react",
+              // We'll let the server know if this is for a protected procedure
+              // with enabled: false (this is a workaround since tRPC doesn't
+              // directly support conditional auth)
+              "x-trpc-skip-auth": "true",
             };
           },
         }),

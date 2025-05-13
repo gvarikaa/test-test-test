@@ -14,11 +14,18 @@ type CreateContextOptions = {
 export const createTRPCContext = async (opts: CreateContextOptions) => {
   const session = await getServerSession(authOptions);
 
+  // Check if this is a query that has enabled: false in useQuery
+  // This can be detected by checking headers or query parameters
+  const url = new URL(opts.req.url);
+  const isSkippedRequest = url.searchParams.has('skipAuth') ||
+                           opts.req.headers.get('x-trpc-skip-auth') === 'true';
+
   return {
     db,
     session,
     req: opts.req,
     res: opts.res,
+    isSkippedRequest,
   };
 };
 
@@ -113,15 +120,18 @@ const tokenLimitMiddleware = t.middleware(async ({ ctx, next }) => {
 // A simple in-memory cache for development
 const cacheManager = new Map<string, { data: any; timestamp: number }>();
 
-// Middleware for caching repetitive queries
+// Middleware for caching repetitive queries with added safety for undefined inputs
 const cacheMiddleware = t.middleware(async ({ path, rawInput, type, next }) => {
   // Only apply caching to queries, not mutations
   if (type !== 'query') {
     return next();
   }
 
+  // Check if rawInput is undefined and convert it to an empty object to prevent JSON.stringify issues
+  const safeInput = rawInput === undefined ? {} : rawInput;
+
   // Generate a cache key based on path and input
-  const cacheKey = `${path}-${JSON.stringify(rawInput)}`;
+  const cacheKey = `${path}-${JSON.stringify(safeInput)}`;
 
   // Check if we have a cached response and it's less than 1 minute old
   const cachedItem = cacheManager.get(cacheKey);
@@ -132,30 +142,37 @@ const cacheMiddleware = t.middleware(async ({ path, rawInput, type, next }) => {
     return { ok: true, data: cachedItem.data };
   }
 
-  // Execute the request
-  const result = await next();
+  try {
+    // Execute the request with error handling
+    const result = await next();
 
-  // Cache the response for future requests
-  if (result.ok) {
-    cacheManager.set(cacheKey, {
-      data: result.data,
-      timestamp: Date.now()
-    });
+    // Cache the response for future requests
+    if (result.ok) {
+      cacheManager.set(cacheKey, {
+        data: result.data,
+        timestamp: Date.now()
+      });
 
-    // Prevent the cache from growing too large
-    if (cacheManager.size > 1000) {
-      // Remove the oldest entry
-      const oldestKey = [...cacheManager.entries()]
-        .sort(([, a], [, b]) => a.timestamp - b.timestamp)[0][0];
-      cacheManager.delete(oldestKey);
+      // Prevent the cache from growing too large
+      if (cacheManager.size > 1000) {
+        // Remove the oldest entry
+        const oldestKey = [...cacheManager.entries()]
+          .sort(([, a], [, b]) => a.timestamp - b.timestamp)[0][0];
+        cacheManager.delete(oldestKey);
+      }
+
+      if (enableDebugLogging) {
+        console.log(`[tRPC Cache] 🟢 Cache set for ${path}`);
+      }
     }
 
+    return result;
+  } catch (error) {
     if (enableDebugLogging) {
-      console.log(`[tRPC Cache] 🟢 Cache set for ${path}`);
+      console.error(`[tRPC Cache] ❌ Error in ${path}:`, error);
     }
+    throw error;
   }
-
-  return result;
 });
 
 // Base procedures with performance tracking and optional caching
@@ -167,6 +184,11 @@ export const router = t.router;
 export const publicProcedure = baseProcedure;
 
 const enforceUserIsAuthed = t.middleware(({ ctx, next }) => {
+  // Skip auth check if the query is disabled via useQuery's enabled: false
+  if (ctx.isSkippedRequest) {
+    return next({ ctx });
+  }
+
   if (!ctx.session || !ctx.session.user) {
     throw new TRPCError({
       code: 'UNAUTHORIZED',

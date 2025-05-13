@@ -10,12 +10,22 @@ export const reelRouter = router({
       z.object({
         limit: z.number().min(1).max(50).default(10),
         cursor: z.string().optional(),
-        includeFollowing: z.boolean().optional(),
-        includeTopics: z.boolean().optional(),
-        includeTrending: z.boolean().optional(),
-        includeSimilarContent: z.boolean().optional(),
-        includeExplore: z.boolean().optional(),
-        diversityFactor: z.number().min(0).max(1).optional(),
+        includeFollowing: z.boolean().default(true),
+        includeTopics: z.boolean().default(true),
+        includeTrending: z.boolean().default(true),
+        includeSimilarContent: z.boolean().default(true),
+        includeExplore: z.boolean().default(true),
+        diversityFactor: z.number().min(0).max(1).default(0.3),
+        direction: z.enum(["forward", "backward"]).default("forward")
+      }).optional().default({
+        limit: 10,
+        includeFollowing: true,
+        includeTopics: true,
+        includeTrending: true,
+        includeSimilarContent: true,
+        includeExplore: true,
+        diversityFactor: 0.3,
+        direction: "forward"
       })
     )
     .query(async ({ ctx, input }) => {
@@ -199,7 +209,11 @@ export const reelRouter = router({
         limit: z.number().min(1).max(50).default(10),
         cursor: z.string().optional(),
         userId: z.string().optional(),
-      }).optional()
+        direction: z.enum(["forward", "backward"]).default("forward")
+      }).optional().default({
+        limit: 10,
+        direction: "forward"
+      })
     )
     .query(async ({ ctx, input }) => {
       // Set default values if input is undefined

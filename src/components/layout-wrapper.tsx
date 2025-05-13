@@ -5,6 +5,7 @@ import { ErrorBoundary } from './error-boundary';
 import { AuthProvider } from "@/providers/auth-provider";
 import { TRPCProvider } from "@/providers/trpc-provider";
 import { ThemeProvider } from "@/providers/theme-provider";
+import { ChatManager, ChatProvider } from "@/app/components/chat/chat-manager";
 
 interface LayoutWrapperProps {
   children: ReactNode;
@@ -39,7 +40,9 @@ export function LayoutWrapper({ children }: LayoutWrapperProps) {
                 document.documentElement.classList.add('dark');
               `
             }} />
-            {children}
+            <ChatProvider>
+              {children}
+            </ChatProvider>
           </ThemeProvider>
         </TRPCProvider>
       </AuthProvider>
