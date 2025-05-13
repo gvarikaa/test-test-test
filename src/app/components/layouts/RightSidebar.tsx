@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import { useSession } from "next-auth/react";
-import { useChatManager } from "@/app/components/chat/chat-manager";
+import { useChatManager } from "@/app/components/chat/chat-context";
 import { api } from "@/lib/trpc/api";
 import { clientPusher, PusherEvents, getUserChannel } from "@/lib/pusher";
 import { ChatButton } from "@/app/components/chat/chat-button";
@@ -125,7 +125,10 @@ function RightSidebar() {
                 <div className="flex w-full items-center gap-3 rounded-lg px-3 py-2 hover:bg-gray-800/40 cursor-pointer">
                   <div 
                     className="flex items-center gap-3 flex-1"
-                    onClick={() => startChat(contact.id)}
+                    onClick={() => {
+                      console.log('RightSidebar: Starting chat with user', contact);
+                      startChat(contact.id);
+                    }}
                   >
                     <div className="relative h-10 w-10">
                       <Image

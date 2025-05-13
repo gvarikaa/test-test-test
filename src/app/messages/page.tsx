@@ -86,11 +86,8 @@ export default function MessagesPage() {
                   key={chat.id}
                   onClick={() => {
                     if (otherUser) {
-                      startChat(otherUser.id, {
-                        id: otherUser.id,
-                        name: otherUser.name,
-                        image: otherUser.image,
-                      });
+                      console.log('Messages page: Starting chat with user', otherUser);
+                      startChat(otherUser.id);
                     }
                   }}
                   className="flex items-center p-4 bg-gray-800/30 hover:bg-gray-800/50 rounded-xl cursor-pointer transition-all duration-200 border border-gray-700/30 hover:border-gray-600"

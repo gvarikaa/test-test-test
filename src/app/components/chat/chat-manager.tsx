@@ -26,6 +26,8 @@ type ChatContextType = {
   error: { message: string; userId?: string } | null;
   isLoading: boolean;
   clearError: () => void;
+  newChatId: string | null;
+  newChatUser: User | null;
 };
 
 // Create the context
@@ -43,8 +45,21 @@ export const useChatManager = () => {
 // ChatProvider wrapper component for global access
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [errorState, setErrorState] = useState<{ message: string; userId?: string } | null>(null);
+  const [newChatId, setNewChatId] = useState<string | null>(null);
+  const [newChatUser, setNewChatUser] = useState<User | null>(null);
   const { data: session, status: sessionStatus } = useSession();
   const { mutate: createChat, isLoading, isError, error } = api.chat.createOrGetChat.useMutation({
+    onSuccess: (newChat) => {
+      // Find the other user in participants
+      const otherParticipant = newChat.participants.find(
+        (p) => p.user.id !== session?.user?.id
+      );
+      
+      if (otherParticipant) {
+        setNewChatId(newChat.id);
+        setNewChatUser(otherParticipant.user);
+      }
+    },
     onError: (err) => {
       console.error("Error creating chat:", err);
       setErrorState({ message: err.message });
@@ -104,7 +119,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     startChat,
     error: errorState,
     isLoading,
-    clearError
+    clearError,
+    newChatId,
+    newChatUser
   };
 
   return (
@@ -121,11 +138,32 @@ export function ChatManager() {
   const [onlineUsers, setOnlineUsers] = useState<Record<string, boolean>>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { data: session, status: sessionStatus } = useSession();
+  const { newChatId, newChatUser, startChat } = useChatManager();
 
   // Reset error state when session changes
   useEffect(() => {
     setErrorMessage(null);
   }, [sessionStatus]);
+
+  // Watch for new chats from the context
+  useEffect(() => {
+    if (newChatId && newChatUser) {
+      // Check if chat already exists
+      if (!activeChats.some((chat) => chat.id === newChatId)) {
+        const chatToAdd = {
+          id: newChatId,
+          otherUser: newChatUser,
+          unreadCount: 0,
+        };
+        
+        console.log('Adding new chat from context:', chatToAdd);
+        setActiveChats((prev) => [...prev, chatToAdd]);
+      }
+      
+      // Make sure the chat is not minimized
+      setMinimizedChats((prev) => prev.filter((id) => id !== newChatId));
+    }
+  }, [newChatId, newChatUser, activeChats]);
 
   // trpc query to get recent chats with proper error handling
   const { data: chatData, error: chatDataError, isError: isChatDataError, isLoading: isChatDataLoading } = api.chat.getRecentChats.useQuery(
@@ -142,111 +180,8 @@ export function ChatManager() {
     }
   );
 
-  // trpc mutation to create a new chat
-  const { mutate: createChat } = api.chat.createOrGetChat.useMutation({
-    onSuccess: (newChat) => {
-      console.log('Chat created successfully:', newChat);
-
-      // Check if chat already exists in activeChats
-      if (!activeChats.some((chat) => chat.id === newChat.id)) {
-        // Find the other user in participants
-        const otherParticipant = newChat.participants.find(
-          (p) => p.user.id !== session?.user?.id
-        );
-        
-        const chatToAdd = {
-          id: newChat.id,
-          otherUser: otherParticipant?.user || { id: "", name: "User", image: null },
-          unreadCount: 0,
-        };
-
-        console.log('Adding new chat to activeChats:', chatToAdd);
-        setActiveChats((prev) => [...prev, chatToAdd]);
-      }
-
-      // Make sure the chat is not minimized
-      setMinimizedChats((prev) => prev.filter((id) => id !== newChat.id));
-    },
-    onError: (error) => {
-      console.error('Error creating chat:', error);
-      
-      // Log detailed error for debugging
-      if (error instanceof Error) {
-        console.error('Error details:', {
-          message: error.message,
-          name: error.name,
-          cause: error.cause,
-          stack: error.stack
-        });
-      }
-
-      // If the error is related to a specific user, show a detailed error message
-      if (error.message.includes('User not found')) {
-        // This is likely due to trying to chat with a user that doesn't exist in the database
-        console.error('Cannot start chat: User ID not found in database');
-        setErrorMessage('მომხმარებელი ვერ მოიძებნა ბაზაში. გთხოვთ სცადოთ სხვა მომხმარებელი.');
-        setTimeout(() => setErrorMessage(null), 5000);
-      } else if (error.message.includes('cannot create a chat')) {
-        setErrorMessage(error.message);
-        setTimeout(() => setErrorMessage(null), 5000);
-      } else {
-        // For other errors, just show the error message
-        setErrorMessage('ჩეთის დაწყება ვერ მოხერხდა. გთხოვთ სცადოთ მოგვიანებით.');
-        setTimeout(() => setErrorMessage(null), 5000);
-      }
-    }
-  });
-
-  // Function to start a chat with a user (used locally in the manager)
-  const startChat = (userId: string) => {
-    console.log(`ChatManager: Starting chat with user ${userId}`);
-
-    // Clear error message if there was one
-    setErrorMessage(null);
-
-    // Validate user ID before proceeding
-    if (!userId || typeof userId !== 'string') {
-      setErrorMessage('Invalid user ID provided');
-      return;
-    }
-
-    // Don't allow starting chat with yourself
-    if (session?.user?.id && userId === session.user.id) {
-      setErrorMessage('You cannot start a chat with yourself');
-      return;
-    }
-
-    // Check if we already have a chat with this user
-    const existingChat = activeChats.find(chat => chat.otherUser.id === userId);
-    if (existingChat) {
-      // If minimized, un-minimize it
-      if (minimizedChats.includes(existingChat.id)) {
-        setMinimizedChats(prev => prev.filter(id => id !== existingChat.id));
-      }
-      // Make sure the chat is visible
-      console.log(`Chat already exists for user ${userId}, ensuring it's visible`);
-      return;
-    }
-
-    // If user is logged in, make the API call
-    if (session?.user?.id) {
-      try {
-        console.log('Calling createChat API with userId:', userId);
-        
-        // Pass userId as an object parameter to follow tRPC's expected format
-        const input = { userId };
-        console.log('Input object for createChat:', input);
-        
-        createChat(input);
-      } catch (err) {
-        console.error('Error calling createChat:', err);
-        setErrorMessage('An error occurred while creating the chat');
-      }
-    } else {
-      console.warn('Session not available - cannot create chat');
-      setErrorMessage('You must be logged in to start a chat');
-    }
-  };
+  // trpc mutation to create a new chat - REMOVED: now using context's mutation
+  // Function to start a chat - REMOVED: now using context's startChat
 
   // Set up Pusher subscription for new messages
   useEffect(() => {
@@ -262,7 +197,10 @@ export function ChatManager() {
         // Fetch the chat details and add it to active chats
         const input = { userId: data.senderId };
         console.log('Creating chat from Pusher event with input:', input);
-        createChat(input);
+        // Use context's startChat instead
+        if (data.senderId && data.senderId !== session.user.id) {
+          startChat(data.senderId);
+        }
       } else {
         // Update unread count for this chat
         setActiveChats((prev) =>
@@ -296,7 +234,7 @@ export function ChatManager() {
       clientPusher.unsubscribe(getUserChannel(session.user.id as string, "chat"));
     };
   // Remove the activeChats dependency to avoid re-subscribing when chats change
-  }, [session?.user?.id, createChat]);
+  }, [session?.user?.id, startChat]);
 
   // Functions for closing, minimizing, and maximizing chats
   const closeChat = (chatId: string) => {
@@ -326,13 +264,8 @@ export function ChatManager() {
     return (width + spacing) * index + baseRight;
   };
 
-  // Use useMemo to prevent unnecessary re-renders
-  const chatContextValue = React.useMemo(() => ({
-    startChat,
-  }), [startChat]);
-
   return (
-    <ChatContext.Provider value={chatContextValue}>
+    <>
       {/* Error message display */}
       {errorMessage && (
         <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg z-[10000]">
@@ -388,6 +321,6 @@ export function ChatManager() {
         })}
       </div>
 
-    </ChatContext.Provider>
+    </>
   );
 }
