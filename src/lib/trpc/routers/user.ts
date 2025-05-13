@@ -6,51 +6,62 @@ export const userRouter = router({
   getUsers: protectedProcedure
     .input(
       z.object({
-        limit: z.number().min(1).max(100).default(5),
+        limit: z.number().min(1).max(100).default(30),
         cursor: z.string().nullish(),
       }).optional().default({
-        limit: 5,
+        limit: 30,
         cursor: null
       })
     )
     .query(async ({ ctx, input }) => {
       const { limit, cursor } = input;
       
-      const whereClause: any = {};
+      console.log('Getting users, current user:', ctx.session.user.id);
+      console.log('Limit:', limit);
       
-      // Exclude the current user
-      whereClause.id = { not: ctx.session.user.id };
-      
-      // If cursor is provided, only fetch users created after the cursor
-      if (cursor) {
-        whereClause.id = { ...whereClause.id, lt: cursor };
+      try {
+        // Fetch all users except current user with robust error handling
+        const users = await ctx.db.user.findMany({
+          where: {
+            id: { not: ctx.session.user.id },
+            ...(cursor ? { id: { lt: cursor } } : {})
+          },
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            image: true,
+            createdAt: true,
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+          take: limit + 1,
+        });
+        
+        console.log(`Found ${users.length} users`);
+        if (users.length > 0) {
+          console.log('First user:', users[0]);
+        }
+        
+        let nextCursor: typeof cursor = undefined;
+        if (users.length > limit) {
+          const nextItem = users.pop();
+          nextCursor = nextItem!.id;
+        }
+        
+        return {
+          users,
+          nextCursor,
+        };
+      } catch (error) {
+        console.error('Error fetching users:', error);
+        // Still return empty array instead of failing completely
+        return {
+          users: [],
+          nextCursor: undefined
+        };
       }
-      
-      const users = await ctx.db.user.findMany({
-        where: whereClause,
-        select: {
-          id: true,
-          name: true,
-          username: true,
-          image: true,
-          createdAt: true,
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
-        take: limit + 1,
-      });
-      
-      let nextCursor: typeof cursor = undefined;
-      if (users.length > limit) {
-        const nextItem = users.pop();
-        nextCursor = nextItem!.id;
-      }
-      
-      return {
-        users,
-        nextCursor,
-      };
     }),
     
   getAll: publicProcedure.query(async ({ ctx }) => {

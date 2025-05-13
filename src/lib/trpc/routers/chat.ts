@@ -91,6 +91,114 @@ const userChatPreferencesSchema = z.object({
 });
 
 export const chatRouter = router({
+  getChatSettings: protectedProcedure
+    .input(z.object({ chatId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      try {
+        const chat = await ctx.db.chat.findUnique({
+          where: { id: input.chatId },
+          include: {
+            users: true,
+            chatSettings: true,
+            lastMessage: true,
+          },
+        });
+
+        if (!chat) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Chat not found',
+          });
+        }
+
+        // Ensure user is part of the chat
+        const isUserInChat = chat.users.some(user => user.id === ctx.session.user.id);
+        if (!isUserInChat) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'You are not part of this chat',
+          });
+        }
+
+        return {
+          chatId: chat.id,
+          isGroup: chat.isGroup,
+          settings: chat.chatSettings,
+          lastActivity: chat.lastMessage?.createdAt || chat.updatedAt,
+          members: chat.users,
+        };
+      } catch (error) {
+        console.error('Error fetching chat settings:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to fetch chat settings',
+        });
+      }
+    }),
+
+  getUnreadCount: protectedProcedure
+    .query(async ({ ctx }) => {
+      try {
+        const userId = ctx.session.user.id;
+        
+        // Get all chat participants for the user
+        const participants = await ctx.db.chatParticipant.findMany({
+          where: { userId },
+          include: {
+            chat: {
+              include: {
+                messages: {
+                  orderBy: { createdAt: 'desc' },
+                  take: 1,
+                },
+              },
+            },
+          },
+        });
+        
+        let totalUnread = 0;
+        
+        for (const participant of participants) {
+          const chat = participant.chat;
+          const lastMessage = chat.messages[0];
+          
+          if (!lastMessage || !participant.lastReadMessageId) {
+            continue;
+          }
+          
+          // Count unread messages in this chat
+          if (lastMessage.id !== participant.lastReadMessageId) {
+            const unreadCount = await ctx.db.message.count({
+              where: {
+                chatId: chat.id,
+                createdAt: {
+                  gt: participant.lastReadMessageId ? 
+                    (await ctx.db.message.findUnique({
+                      where: { id: participant.lastReadMessageId },
+                      select: { createdAt: true },
+                    }))?.createdAt : 
+                    new Date(0),
+                },
+                senderId: {
+                  not: userId,
+                },
+              },
+            });
+            
+            totalUnread += unreadCount;
+          }
+        }
+        
+        return { totalUnread };
+      } catch (error) {
+        console.error('Error getting unread count:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get unread count',
+        });
+      }
+    }),
+
   getRecentChats: protectedProcedure
     .input(
       z.object({
@@ -459,7 +567,100 @@ export const chatRouter = router({
         }
       }
       
+      // Notify via Pusher that messages have been read
+      await triggerEvent(
+        getUserChannel(ctx.session.user.id),
+        'message:read',
+        { chatId, userId: ctx.session.user.id }
+      );
+      
       return { success: true };
+    }),
+
+  addReaction: protectedProcedure
+    .input(
+      z.object({
+        messageId: z.string(),
+        emoji: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { messageId, emoji } = input;
+      
+      try {
+        // Verify the message exists
+        const message = await ctx.db.message.findUnique({
+          where: { id: messageId },
+          include: { chat: { include: { users: true } } },
+        });
+        
+        if (!message) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Message not found',
+          });
+        }
+        
+        // Verify user has access to this chat
+        const isUserInChat = message.chat.users.some(user => user.id === ctx.session.user.id);
+        if (!isUserInChat) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'You are not a participant in this chat',
+          });
+        }
+        
+        // Check if user already reacted with this emoji
+        const existingReaction = await ctx.db.reaction.findFirst({
+          where: {
+            messageId,
+            userId: ctx.session.user.id,
+            emoji,
+          },
+        });
+        
+        if (existingReaction) {
+          // Remove reaction if already exists (toggle)
+          await ctx.db.reaction.delete({
+            where: { id: existingReaction.id },
+          });
+          
+          // Notify via Pusher
+          await triggerEvent(getChatChannel(message.chatId), PusherEvents.REACTION_REMOVED, {
+            messageId,
+            emoji,
+            userId: ctx.session.user.id,
+          });
+          
+          return { action: 'removed', reaction: existingReaction };
+        } else {
+          // Add new reaction
+          const reaction = await ctx.db.reaction.create({
+            data: {
+              messageId,
+              userId: ctx.session.user.id,
+              emoji,
+            },
+          });
+          
+          // Notify via Pusher
+          await triggerEvent(getChatChannel(message.chatId), PusherEvents.REACTION_ADDED, {
+            messageId,
+            emoji,
+            userId: ctx.session.user.id,
+          });
+          
+          return { action: 'added', reaction };
+        }
+      } catch (error) {
+        console.error('Error adding reaction:', error);
+        if (error instanceof TRPCError) throw error;
+        
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to add reaction',
+        });
+      }
     }),
   
   createOrGetChat: protectedProcedure

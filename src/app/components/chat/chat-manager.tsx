@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, createContext, useContext, useMemo 
 import { useSession } from "next-auth/react";
 import { api } from "@/lib/trpc/api";
 import { clientPusher, getUserChannel, PusherEvents } from "@/lib/pusher";
-import { ChatWindow } from "./chat-window";
+import { EnhancedChatWindow } from "./enhanced-chat-window";
 import { MessageSquare } from "lucide-react";
 
 type User = {
@@ -110,7 +110,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   return (
     <ChatContext.Provider value={contextValue}>
       {children}
-      <ChatManager />
     </ChatContext.Provider>
   );
 }
@@ -191,21 +190,9 @@ export function ChatManager() {
         setErrorMessage(error.message);
         setTimeout(() => setErrorMessage(null), 5000);
       } else {
-        // For other errors, create a placeholder chat for testing
-        // This avoids blocking the UI when backend is not working
-        const testId = `test-${Date.now()}`;
-        const placeholderChat = {
-          id: testId,
-          otherUser: {
-            id: testId,
-            name: "Fallback Chat",
-            image: "https://ui-avatars.com/api/?name=Fallback+Chat&background=FF5722&color=fff"
-          },
-          unreadCount: 0,
-        };
-
-        console.log('Creating fallback chat due to API error:', placeholderChat);
-        setActiveChats(prev => [...prev, placeholderChat]);
+        // For other errors, just show the error message
+        setErrorMessage('ჩეთის დაწყება ვერ მოხერხდა. გთხოვთ სცადოთ მოგვიანებით.');
+        setTimeout(() => setErrorMessage(null), 5000);
       }
     }
   });
@@ -236,6 +223,8 @@ export function ChatManager() {
       if (minimizedChats.includes(existingChat.id)) {
         setMinimizedChats(prev => prev.filter(id => id !== existingChat.id));
       }
+      // Make sure the chat is visible
+      console.log(`Chat already exists for user ${userId}, ensuring it's visible`);
       return;
     }
 
@@ -244,13 +233,7 @@ export function ChatManager() {
       try {
         console.log('Calling createChat API with userId:', userId);
         
-        // Make sure userId is a valid string and not undefined
-        if (!userId || typeof userId !== 'string') {
-          throw new Error('Invalid userId provided');
-        }
-        
         // Pass userId as an object parameter to follow tRPC's expected format
-        // Double-check that we're creating a proper object here
         const input = { userId };
         console.log('Input object for createChat:', input);
         
@@ -350,6 +333,13 @@ export function ChatManager() {
 
   return (
     <ChatContext.Provider value={chatContextValue}>
+      {/* Error message display */}
+      {errorMessage && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg z-[10000]">
+          {errorMessage}
+        </div>
+      )}
+      
       {/* Active chat windows */}
       <div className="fixed bottom-0 right-0 z-[9999]">
         {visibleChats.map((chat, index) => (
@@ -358,7 +348,7 @@ export function ChatManager() {
             style={{ right: `${getChatPosition(index)}rem` }}
             className="fixed bottom-0"
           >
-            <ChatWindow
+            <EnhancedChatWindow
               chatId={chat.id}
               otherUser={{
                 ...chat.otherUser,
@@ -382,7 +372,7 @@ export function ChatManager() {
               style={{ right: `${getChatPosition(visibleChats.length + index)}rem` }}
               className="fixed bottom-0"
             >
-              <ChatWindow
+              <EnhancedChatWindow
                 chatId={chatId}
                 otherUser={{
                   ...chat.otherUser,
@@ -398,28 +388,6 @@ export function ChatManager() {
         })}
       </div>
 
-      {/* Chat button */}
-      <div className="fixed bottom-4 right-4 z-10">
-        <button
-          className="bg-accent-blue text-text-primary p-3 rounded-full shadow-lg hover:bg-accent-blue-hover"
-          onClick={() => {
-            // Create a test chat with random ID when clicked
-            const testId = `test-${Date.now()}`;
-            const chat = {
-              id: testId,
-              otherUser: {
-                id: testId,
-                name: "Test User",
-                image: "https://ui-avatars.com/api/?name=Test+User&background=FF5722&color=fff"
-              },
-              unreadCount: 0,
-            };
-            setActiveChats(prev => [...prev, chat]);
-          }}
-        >
-          <MessageSquare className="h-6 w-6" />
-        </button>
-      </div>
     </ChatContext.Provider>
   );
 }

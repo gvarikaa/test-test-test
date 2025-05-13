@@ -81,6 +81,10 @@ export enum PusherEvents {
 
   // Language events
   LANGUAGE_CHANGED = 'language-changed',
+  
+  // Reaction events
+  REACTION_ADDED = 'reaction-added',
+  REACTION_REMOVED = 'reaction-removed',
 }
 
 // Helper function to trigger an event on the server side

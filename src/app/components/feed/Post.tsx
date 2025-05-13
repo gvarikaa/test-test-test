@@ -193,7 +193,9 @@ export default function Post({ post }: PostProps) {
     return () => {
       const renderTime = performance.now() - startTime;
       if (renderTime > 100) { // Log slow renders
-        loggers.performance('Post render', startTime, { postId: post.id, renderTime });
+        loggers.performance.info(`Post render took ${renderTime}ms`, { 
+          extra: { postId: post.id, renderTime } 
+        });
       }
     };
   }, [post.id]);

@@ -42,6 +42,7 @@ export function LayoutWrapper({ children }: LayoutWrapperProps) {
             }} />
             <ChatProvider>
               {children}
+              <ChatManager />
             </ChatProvider>
           </ThemeProvider>
         </TRPCProvider>

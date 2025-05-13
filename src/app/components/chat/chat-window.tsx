@@ -10,6 +10,7 @@ import { formatDistanceToNow } from "date-fns";
 import { MediaDisplay } from "../common/media-display";
 import { UploadForm } from "../forms/upload-form";
 import { MediaType } from "@prisma/client";
+import { getDemoMessages, addDemoMessage } from "./demo-messages";
 
 type Message = {
   id: string;
@@ -39,7 +40,7 @@ type User = {
 
 interface ChatWindowProps {
   chatId: string;
-  otherUser: User;
+  otherUser: User & { isDemo?: boolean }; // Added isDemo flag
   isMinimized?: boolean;
   onClose: () => void;
   onMinimize: () => void;
@@ -64,10 +65,13 @@ export function ChatWindow({
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const { data: session } = useSession();
   
-  // trpc query to get messages
+  // Detect if this is a demo chat by checking the otherUser properties or ID format
+  const isDemo = otherUser.isDemo || (chatId && chatId.startsWith('clb'));
+  
+  // trpc query to get messages - only for non-demo chats
   const { data, isLoading: messagesLoading } = api.chat.getMessages.useQuery(
     { chatId, limit: 50 },
-    { enabled: !!session?.user?.id && !!chatId }
+    { enabled: !isDemo && !!session?.user?.id && !!chatId }
   );
   
   // trpc mutation to send a message
@@ -80,10 +84,16 @@ export function ChatWindow({
   
   // trpc mutation to mark messages as read
   const { mutate: markAsRead } = api.chat.markAsRead.useMutation();
-
-  // Update messages when data changes
+  
+  // Initialize with demo messages or update with real messages
   useEffect(() => {
-    if (data?.messages) {
+    if (isDemo) {
+      // For demo chats, use the demo message generator
+      setMessages(getDemoMessages(otherUser.name || 'Demo User', session?.user?.name || 'You'));
+      setIsLoading(false);
+      scrollToBottom();
+    } else if (data?.messages) {
+      // For real chats, use the API data
       setMessages(data.messages);
       setIsLoading(false);
       scrollToBottom();
@@ -93,11 +103,11 @@ export function ChatWindow({
         markAsRead({ chatId });
       }
     }
-  }, [data, chatId, markAsRead]);
+  }, [data, chatId, markAsRead, isDemo, otherUser.name, session?.user?.name]);
 
-  // Set up Pusher subscription
+  // Set up Pusher subscription - only for non-demo chats
   useEffect(() => {
-    if (!session?.user?.id || !chatId) return;
+    if (isDemo || !session?.user?.id || !chatId) return;
 
     const channel = clientPusher.subscribe(getChatChannel(chatId));
     
@@ -135,7 +145,49 @@ export function ChatWindow({
   const handleSendMessage = () => {
     if (!message.trim() && !showUploadForm) return;
     
-    if (session?.user?.id) {
+    if (isDemo) {
+      // For demo chats, handle locally
+      const newDemoMessage = addDemoMessage(
+        messages,
+        message.trim(),
+        true, // is current user
+        otherUser.name || 'Demo User',
+        session?.user?.name || 'You'
+      );
+      
+      setMessages(prev => [...prev, newDemoMessage]);
+      setMessage("");
+      scrollToBottom();
+      
+      // Simulate a response after a delay
+      setTimeout(() => {
+        const responses = [
+          "That's interesting!",
+          "I see what you mean.",
+          "Thanks for sharing that.",
+          "I agree with you.",
+          "Let me think about that.",
+          "Great point!",
+          "I hadn't thought of it that way before.",
+          "You make a good argument.",
+          "That's really helpful, thank you.",
+          "I appreciate your perspective."
+        ];
+        
+        const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+        const demoResponse = addDemoMessage(
+          [...messages, newDemoMessage],
+          randomResponse,
+          false, // not current user
+          otherUser.name || 'Demo User',
+          session?.user?.name || 'You'
+        );
+        
+        setMessages(prev => [...prev, demoResponse]);
+        scrollToBottom();
+      }, 1500);
+    } else if (session?.user?.id) {
+      // For real chats, use the API
       sendMessageMutation({
         chatId,
         content: message.trim(),
@@ -165,8 +217,22 @@ export function ChatWindow({
       handleSendMessage();
     }
     
-    // Handle typing indicator
-    if (session?.user?.id && message.trim()) {
+    if (isDemo) {
+      // For demo chats, simulate typing indicator behavior locally
+      if (message.trim()) {
+        // No need to actually trigger any events, just update local state
+        if (Math.random() > 0.7) { // Random chance to show typing
+          setIsTyping(true);
+          
+          // Clear after 2-3 seconds
+          setTimeout(() => {
+            setIsTyping(false);
+          }, 2000 + Math.random() * 1000);
+        }
+      }
+    } 
+    // Handle typing indicator for real chats
+    else if (session?.user?.id && message.trim()) {
       // Clear previous timeout
       if (typingTimeout) {
         clearTimeout(typingTimeout);
@@ -193,7 +259,46 @@ export function ChatWindow({
   };
   
   const handleUploadComplete = (url: string, type: MediaType, thumbnailUrl?: string) => {
-    if (session?.user?.id) {
+    if (isDemo) {
+      // For demo chats, create a local media message
+      const mediaMessage = {
+        id: `demo-media-${Date.now()}`,
+        content: "Media message",
+        createdAt: new Date(),
+        senderId: 'current-user',
+        receiverId: 'demo-contact',
+        media: [{
+          id: `demo-media-${Date.now()}`,
+          type: type,
+          url: url,
+          thumbnailUrl: thumbnailUrl || null
+        }],
+        sender: {
+          id: 'current-user',
+          name: session?.user?.name || 'You',
+          image: null
+        }
+      };
+      
+      setMessages(prev => [...prev, mediaMessage]);
+      setShowUploadForm(false);
+      scrollToBottom();
+      
+      // Simulate a response
+      setTimeout(() => {
+        const demoResponse = addDemoMessage(
+          [...messages, mediaMessage],
+          "Thanks for sharing!",
+          false,
+          otherUser.name || 'Demo User',
+          session?.user?.name || 'You'
+        );
+        
+        setMessages(prev => [...prev, demoResponse]);
+        scrollToBottom();
+      }, 1500);
+    } else if (session?.user?.id) {
+      // For real chats, use the API
       sendMessageMutation({
         chatId,
         content: "",
@@ -209,8 +314,8 @@ export function ChatWindow({
 
   if (isMinimized) {
     return (
-      <div className="fixed bottom-0 right-4 w-72 bg-header-bg border border-border-color rounded-t-lg shadow-lg z-[9999]" style={{ zIndex: 9999 }}>
-        <div className="p-3 border-b border-border-color flex justify-between items-center cursor-pointer bg-header-bg" onClick={onMaximize}>
+      <div className="fixed bottom-0 right-4 w-72 bg-gray-800 border border-gray-700 rounded-t-lg shadow-lg z-[9999]" style={{ zIndex: 9999 }}>
+        <div className="p-3 border-b border-gray-700 flex justify-between items-center cursor-pointer bg-gray-800" onClick={onMaximize}>
           <div className="flex items-center">
             <div className="relative">
               <Image
@@ -221,10 +326,10 @@ export function ChatWindow({
                 className="h-8 w-8 rounded-full object-cover"
               />
               {otherUser.online && (
-                <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-accent-green"></span>
+                <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-green-500"></span>
               )}
             </div>
-            <span className="ml-2 font-medium truncate text-text-primary">{otherUser.name || "User"}</span>
+            <span className="ml-2 font-medium truncate text-white">{otherUser.name || "User"}</span>
           </div>
           <div className="flex items-center">
             <button
@@ -232,7 +337,7 @@ export function ChatWindow({
                 e.stopPropagation();
                 onMaximize();
               }}
-              className="p-1 text-text-secondary hover:text-text-primary"
+              className="p-1 text-gray-400 hover:text-white"
             >
               <Maximize className="h-4 w-4" />
             </button>
@@ -241,7 +346,7 @@ export function ChatWindow({
                 e.stopPropagation();
                 onClose();
               }}
-              className="p-1 text-text-secondary hover:text-text-primary"
+              className="p-1 text-gray-400 hover:text-white"
             >
               <X className="h-4 w-4" />
             </button>
@@ -252,9 +357,9 @@ export function ChatWindow({
   }
 
   return (
-    <div className="fixed bottom-0 right-4 w-80 h-96 bg-card-bg border border-border-color rounded-t-lg shadow-lg flex flex-col z-[9999]" style={{ zIndex: 9999 }}>
+    <div className="fixed bottom-0 right-4 w-80 h-96 bg-gray-900 border border-gray-700 rounded-t-lg shadow-lg flex flex-col z-[9999]" style={{ zIndex: 9999 }}>
       {/* Chat header */}
-      <div className="p-3 border-b border-border-color flex justify-between items-center bg-header-bg">
+      <div className="p-3 border-b border-gray-700 flex justify-between items-center bg-gray-800">
         <div className="flex items-center">
           <div className="relative">
             <Image
@@ -265,21 +370,21 @@ export function ChatWindow({
               className="h-8 w-8 rounded-full object-cover"
             />
             {otherUser.online && (
-              <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-accent-green"></span>
+              <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-green-500"></span>
             )}
           </div>
-          <span className="ml-2 font-medium truncate text-text-primary">{otherUser.name || "User"}</span>
+          <span className="ml-2 font-medium truncate text-white">{otherUser.name || "User"}</span>
         </div>
         <div className="flex items-center">
           <button
             onClick={onMinimize}
-            className="p-1 text-text-secondary hover:text-text-primary"
+            className="p-1 text-gray-400 hover:text-white"
           >
             <Minimize className="h-4 w-4" />
           </button>
           <button
             onClick={onClose}
-            className="p-1 text-text-secondary hover:text-text-primary"
+            className="p-1 text-gray-400 hover:text-white"
           >
             <X className="h-4 w-4" />
           </button>
@@ -287,13 +392,13 @@ export function ChatWindow({
       </div>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-4 bg-dark-bg">
+      <div className="flex-1 overflow-y-auto p-3 space-y-4 bg-gray-950">
         {isLoading || messagesLoading ? (
           <div className="flex items-center justify-center h-full">
-            <div className="animate-pulse text-text-secondary">Loading messages...</div>
+            <div className="animate-pulse text-gray-400">Loading messages...</div>
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-text-secondary">
+          <div className="flex items-center justify-center h-full text-gray-400">
             No messages yet
           </div>
         ) : (
@@ -308,10 +413,10 @@ export function ChatWindow({
                 <div
                   className={`max-w-[80%] rounded-lg p-3 shadow-md ${
                     isCurrentUser
-                      ? "bg-accent-blue text-text-primary"
-                      : "bg-card-bg text-text-primary"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-800 text-white"
                   }`}
-                  style={{ backdropFilter: "none", backgroundColor: isCurrentUser ? "var(--accent-blue)" : "var(--card-bg)" }}
+                  style={{ backdropFilter: "none" }}
                 >
                   {msg.content && <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
 
@@ -331,7 +436,7 @@ export function ChatWindow({
 
                   <p
                     className={`text-xs mt-1 ${
-                      isCurrentUser ? "text-text-primary/70" : "text-text-secondary"
+                      isCurrentUser ? "text-white/70" : "text-gray-400"
                     }`}
                   >
                     {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true })}
@@ -344,11 +449,11 @@ export function ChatWindow({
         
         {isTyping && (
           <div className="flex justify-start">
-            <div className="bg-card-bg rounded-lg p-3 shadow-md" style={{ backdropFilter: "none", backgroundColor: "var(--card-bg)" }}>
+            <div className="bg-gray-800 rounded-lg p-3 shadow-md" style={{ backdropFilter: "none" }}>
               <div className="flex space-x-1">
-                <div className="h-2 w-2 rounded-full bg-text-secondary animate-bounce"></div>
-                <div className="h-2 w-2 rounded-full bg-text-secondary animate-bounce delay-75"></div>
-                <div className="h-2 w-2 rounded-full bg-text-secondary animate-bounce delay-150"></div>
+                <div className="h-2 w-2 rounded-full bg-gray-400 animate-bounce"></div>
+                <div className="h-2 w-2 rounded-full bg-gray-400 animate-bounce delay-75"></div>
+                <div className="h-2 w-2 rounded-full bg-gray-400 animate-bounce delay-150"></div>
               </div>
             </div>
           </div>
@@ -359,7 +464,7 @@ export function ChatWindow({
 
       {/* Upload form */}
       {showUploadForm && (
-        <div className="p-3 border-t border-border-color bg-card-bg">
+        <div className="p-3 border-t border-gray-700 bg-gray-800">
           <UploadForm
             onUploadComplete={handleUploadComplete}
             allowedTypes={["IMAGE", "VIDEO", "AUDIO", "DOCUMENT"]}
@@ -367,7 +472,7 @@ export function ChatWindow({
           <button
             type="button"
             onClick={() => setShowUploadForm(false)}
-            className="mt-2 w-full py-1 px-3 bg-hover-bg text-text-secondary rounded-md hover:bg-hover-bg/90 text-sm"
+            className="mt-2 w-full py-1 px-3 bg-gray-700 text-gray-400 rounded-md hover:bg-gray-600 text-sm"
           >
             Cancel
           </button>
@@ -376,12 +481,12 @@ export function ChatWindow({
 
       {/* Input area */}
       {!showUploadForm && (
-        <div className="p-3 border-t border-border-color bg-card-bg">
+        <div className="p-3 border-t border-gray-700 bg-gray-800">
           <div className="flex items-end">
             <button
               type="button"
               onClick={() => setShowUploadForm(true)}
-              className="p-2 text-text-secondary hover:text-text-primary"
+              className="p-2 text-gray-400 hover:text-white"
             >
               <Paperclip className="h-5 w-5" />
             </button>
@@ -390,14 +495,14 @@ export function ChatWindow({
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="flex-1 p-2 bg-input-bg border-none focus:outline-none resize-none text-sm rounded-md text-text-primary"
+              className="flex-1 p-2 bg-gray-700 border-none focus:outline-none resize-none text-sm rounded-md text-white"
               rows={1}
             />
             <button
               type="button"
               onClick={handleSendMessage}
               disabled={!message.trim() && !showUploadForm}
-              className="p-2 text-text-secondary hover:text-accent-blue disabled:opacity-50"
+              className="p-2 text-gray-400 hover:text-blue-600 disabled:opacity-50"
             >
               <Send className="h-5 w-5" />
             </button>

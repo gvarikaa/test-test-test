@@ -63,7 +63,7 @@ export default function WatchTogether({
   const syncTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastUpdateRef = useRef<number>(0);
   
-  const { data: session: authSession } = useSession();
+  const { data: authSession } = useSession();
   
   // TRPC mutations and queries
   const { mutate: createSession } = api.chat.createWatchTogetherSession.useMutation({

@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import TokenHeaderDisplay from '../common/token-header-display';
+import { api } from '@/lib/trpc/api';
+import { clientPusher, getUserChannel, PusherEvents } from '@/lib/pusher';
+import { useSession } from 'next-auth/react';
 
 
 export default function FacebookHeader() {
@@ -16,6 +19,8 @@ export default function FacebookHeader() {
     'გრუპები'
   ]);
   const [showSearchHistory, setShowSearchHistory] = useState(false);
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+  const { data: session } = useSession();
 
   // Define theme colors for consistent styling
   const THEME = {
@@ -47,6 +52,41 @@ export default function FacebookHeader() {
       setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
     }
   };
+
+  // Query to get unread messages count
+  const { data: unreadData, refetch: refetchUnreadCount } = api.chat.getUnreadCount.useQuery(undefined, {
+    enabled: !!session?.user?.id,
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
+
+  // Update unread messages count
+  useEffect(() => {
+    if (unreadData) {
+      setUnreadMessagesCount(unreadData.totalUnread);
+    }
+  }, [unreadData]);
+
+  // Subscribe to real-time message updates
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const userChannel = clientPusher.subscribe(getUserChannel(session.user.id));
+    
+    // Listen for new messages
+    userChannel.bind(PusherEvents.NEW_MESSAGE, () => {
+      refetchUnreadCount();
+    });
+
+    // Listen for message read events
+    userChannel.bind('message:read', () => {
+      refetchUnreadCount();
+    });
+
+    return () => {
+      userChannel.unbind_all();
+      clientPusher.unsubscribe(getUserChannel(session.user.id));
+    };
+  }, [session?.user?.id, refetchUnreadCount]);
 
   // ძიების შესრულება
   const handleSearch = (e: React.FormEvent) => {
@@ -271,13 +311,19 @@ export default function FacebookHeader() {
           </svg>
 
           {/* Notification badge with gradient */}
-          <div className="absolute -right-1 -top-1">
-            <div className="absolute inset-0 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 blur-[1px] opacity-70"></div>
-            <span className="relative flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 px-[2px] text-xs font-bold text-white shadow-sm">3</span>
-          </div>
+          {unreadMessagesCount > 0 && (
+            <>
+              <div className="absolute -right-1 -top-1">
+                <div className="absolute inset-0 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 blur-[1px] opacity-70"></div>
+                <span className="relative flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 px-[2px] text-xs font-bold text-white shadow-sm">
+                  {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
+                </span>
+              </div>
 
-          {/* Animated ping effect */}
-          <span className="absolute inset-0 rounded-xl bg-indigo-500/10 animate-ping opacity-75"></span>
+              {/* Animated ping effect */}
+              <span className="absolute inset-0 rounded-xl bg-indigo-500/10 animate-ping opacity-75"></span>
+            </>
+          )}
         </Link>
 
         {/* Notifications */}

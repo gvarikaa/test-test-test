@@ -113,5 +113,6 @@ export const loggers = {
   db: createLogger('db'),
   ai: createLogger('ai'),
   ui: createLogger('ui'),
-  feed: createLogger('feed')
+  feed: createLogger('feed'),
+  performance: createLogger('performance')
 };

@@ -226,48 +226,91 @@ async function main() {
 
   // Function to create a chat between two users with improved error handling and validation
   async function createChatBetweenUsers(user1Id: string, user2Id: string, user1Name: string, user2Name: string) {
+    // Helper function for safely handling dates in seed operations
+    const safeDate = (targetDate: Date | null | undefined): Date => {
+      if (!targetDate) {
+        return new Date(); // Default to current date if none provided
+      }
+      
+      try {
+        // Make sure it's a valid Date object (this will throw if invalid)
+        const testDate = new Date(targetDate);
+        if (isNaN(testDate.getTime())) {
+          console.warn("Invalid date detected, using current time instead");
+          return new Date();
+        }
+        return testDate;
+      } catch (e) {
+        console.error('Error processing date:', e);
+        return new Date(); // Fallback to current date
+      }
+    };
     try {
       if (user1Id === user2Id) {
         console.log(`Skipping self-chat for ${user1Name}`);
         return null;
       }
 
-      // Check if a chat already exists between these users using a more reliable query
-      const existingChat = await prisma.chat.findFirst({
+      // Get all the participant IDs where user1 is a participant
+      const user1Chats = await prisma.chatParticipant.findMany({
         where: {
-          isGroup: false,
-          participants: {
-            some: {
-              userId: user1Id
-            }
-          },
-          AND: [
-            {
-              participants: {
-                some: {
-                  userId: user2Id
+          userId: user1Id,
+        },
+        select: {
+          chatId: true,
+        },
+      });
+      
+      const user1ChatIds = user1Chats.map(chat => chat.chatId);
+      
+      // Get all the participant IDs where user2 is a participant
+      const user2Chats = await prisma.chatParticipant.findMany({
+        where: {
+          userId: user2Id,
+        },
+        select: {
+          chatId: true,
+        },
+      });
+      
+      const user2ChatIds = user2Chats.map(chat => chat.chatId);
+      
+      // Find chat IDs that are common to both users (potential direct chats)
+      const commonChatIds = user1ChatIds.filter(id => user2ChatIds.includes(id));
+      
+      // Get the first common chat that is a direct chat (not a group)
+      let existingChat = null;
+      if (commonChatIds.length > 0) {
+        for (const chatId of commonChatIds) {
+          const chat = await prisma.chat.findFirst({
+            where: {
+              id: chatId,
+              isGroup: false,
+            },
+            include: {
+              participants: true,
+              messages: {
+                take: 5,
+                orderBy: {
+                  createdAt: 'desc'
                 }
               }
-            }
-          ]
-        },
-        include: {
-          participants: true,
-          messages: {
-            take: 5,
-            orderBy: {
-              createdAt: 'desc'
-            }
+            },
+          });
+          
+          if (chat && chat.participants.length === 2) {
+            existingChat = chat;
+            break;
           }
         }
-      });
+      }
 
       let chat;
       if (existingChat) {
         console.log(`Chat between ${user1Name} and ${user2Name} already exists, checking messages...`);
         chat = existingChat;
       } else {
-        // Create a new chat
+        // Create a new chat with safe date handling
         chat = await prisma.chat.create({
           data: {
             isGroup: false,
@@ -276,16 +319,16 @@ async function main() {
                 {
                   userId: user1Id,
                   role: 'MEMBER',
-                  lastActiveAt: new Date(),
+                  lastActiveAt: safeDate(new Date()),
                 },
                 {
                   userId: user2Id,
                   role: 'MEMBER',
-                  lastActiveAt: new Date(),
+                  lastActiveAt: safeDate(new Date()),
                 },
               ],
             },
-            lastMessageAt: new Date(),
+            lastMessageAt: safeDate(new Date()),
           },
           include: {
             participants: true,
@@ -306,35 +349,35 @@ async function main() {
             chatId: chat.id,
             senderId: user1Id,
             receiverId: user2Id,
-            createdAt: new Date(Date.now() - 3600000 * 24 * 2) // 2 days ago
+            createdAt: safeDate(new Date(Date.now() - 3600000 * 24 * 2)) // 2 days ago
           },
           {
             content: `Hi ${user1Name}! I'm doing great, thanks for asking!`,
             chatId: chat.id,
             senderId: user2Id,
             receiverId: user1Id,
-            createdAt: new Date(Date.now() - 3600000 * 24 * 2 + 60000) // 2 days ago + 1 minute
+            createdAt: safeDate(new Date(Date.now() - 3600000 * 24 * 2 + 60000)) // 2 days ago + 1 minute
           },
           {
             content: `Good to hear! Have you checked out the new features on the platform?`,
             chatId: chat.id,
             senderId: user1Id,
             receiverId: user2Id,
-            createdAt: new Date(Date.now() - 3600000 * 24 * 1) // 1 day ago
+            createdAt: safeDate(new Date(Date.now() - 3600000 * 24 * 1)) // 1 day ago
           },
           {
             content: `Yes, I love the new AI analytics section. It's really helpful!`,
             chatId: chat.id,
             senderId: user2Id,
             receiverId: user1Id,
-            createdAt: new Date(Date.now() - 3600000 * 12) // 12 hours ago
+            createdAt: safeDate(new Date(Date.now() - 3600000 * 12)) // 12 hours ago
           },
           {
             content: `That's great! Let's catch up soon to discuss more ideas.`,
             chatId: chat.id,
             senderId: user1Id,
             receiverId: user2Id,
-            createdAt: new Date(Date.now() - 3600000 * 2) // 2 hours ago
+            createdAt: safeDate(new Date(Date.now() - 3600000 * 2)) // 2 hours ago
           }
         ];
 
@@ -342,10 +385,10 @@ async function main() {
           await prisma.message.create({ data: message });
         }
 
-        // Update the lastMessageAt field on the chat
+        // Update the lastMessageAt field on the chat with safe date
         await prisma.chat.update({
           where: { id: chat.id },
-          data: { lastMessageAt: new Date(Date.now() - 3600000 * 2) }
+          data: { lastMessageAt: safeDate(new Date(Date.now() - 3600000 * 2)) }
         });
 
         console.log(`Added conversation between ${user1Name} and ${user2Name}`);
@@ -357,21 +400,21 @@ async function main() {
             chatId: chat.id,
             senderId: user1Id,
             receiverId: user2Id,
-            createdAt: new Date(Date.now() - 3600000 * 6) // 6 hours ago
+            createdAt: safeDate(new Date(Date.now() - 3600000 * 6)) // 6 hours ago
           },
           {
             content: `Yes, the new features are awesome! Especially the chat improvements.`,
             chatId: chat.id,
             senderId: user2Id,
             receiverId: user1Id,
-            createdAt: new Date(Date.now() - 3600000 * 5) // 5 hours ago
+            createdAt: safeDate(new Date(Date.now() - 3600000 * 5)) // 5 hours ago
           },
           {
             content: `Definitely! Looking forward to using them more.`,
             chatId: chat.id,
             senderId: user1Id,
             receiverId: user2Id,
-            createdAt: new Date(Date.now() - 3600000 * 1) // 1 hour ago
+            createdAt: safeDate(new Date(Date.now() - 3600000 * 1)) // 1 hour ago
           }
         ];
 
@@ -379,10 +422,10 @@ async function main() {
           await prisma.message.create({ data: message });
         }
 
-        // Update the lastMessageAt field
+        // Update the lastMessageAt field with safe date
         await prisma.chat.update({
           where: { id: chat.id },
-          data: { lastMessageAt: new Date(Date.now() - 3600000 * 1) }
+          data: { lastMessageAt: safeDate(new Date(Date.now() - 3600000 * 1)) }
         });
 
         console.log(`Added supplementary messages between ${user1Name} and ${user2Name}`);
@@ -390,12 +433,12 @@ async function main() {
         console.log(`Conversation between ${user1Name} and ${user2Name} already exists with ${existingMessages.length} messages`);
       }
 
-      // Update participants' last active timestamp
+      // Update participants' last active timestamp with safe date
       for (const participant of chat.participants) {
         await prisma.chatParticipant.update({
           where: { id: participant.id },
           data: {
-            lastActiveAt: new Date(Date.now() - Math.floor(Math.random() * 3600000)), // Random activity within last hour
+            lastActiveAt: safeDate(new Date(Date.now() - Math.floor(Math.random() * 3600000))), // Random activity within last hour
             lastReadMessageId: existingMessages.length > 0 ? existingMessages[0].id : undefined
           }
         });
@@ -423,6 +466,26 @@ async function main() {
   // Create a group chat with all users
   console.log('Creating a group chat with all users...');
 
+  // Helper function for safely handling dates in seed operations
+  const safeDate = (targetDate: Date | null | undefined): Date => {
+    if (!targetDate) {
+      return new Date(); // Default to current date if none provided
+    }
+    
+    try {
+      // Make sure it's a valid Date object (this will throw if invalid)
+      const testDate = new Date(targetDate);
+      if (isNaN(testDate.getTime())) {
+        console.warn("Invalid date detected, using current time instead");
+        return new Date();
+      }
+      return testDate;
+    } catch (e) {
+      console.error('Error processing date:', e);
+      return new Date(); // Fallback to current date
+    }
+  };
+
   try {
     const existingGroupChat = await prisma.chat.findFirst({
       where: {
@@ -441,24 +504,24 @@ async function main() {
           isGroup: true,
           description: 'Official team chat for DapDip platform users',
           image: 'https://ui-avatars.com/api/?name=DapDip+Team&background=8A2BE2&color=fff',
-          lastMessageAt: new Date(),
+          lastMessageAt: safeDate(new Date()),
           participants: {
             create: [
               {
                 userId: admin.id,
                 role: 'OWNER',
                 isAdmin: true,
-                lastActiveAt: new Date(),
+                lastActiveAt: safeDate(new Date()),
               },
               {
                 userId: user1.id,
                 role: 'MEMBER',
-                lastActiveAt: new Date(Date.now() - 1800000), // 30 minutes ago
+                lastActiveAt: safeDate(new Date(Date.now() - 1800000)), // 30 minutes ago
               },
               {
                 userId: user2.id,
                 role: 'MEMBER',
-                lastActiveAt: new Date(Date.now() - 3600000), // 1 hour ago
+                lastActiveAt: safeDate(new Date(Date.now() - 3600000)), // 1 hour ago
               },
             ],
           },
@@ -483,28 +546,28 @@ async function main() {
           chatId: groupChat.id,
           senderId: admin.id,
           messageType: 'TEXT',
-          createdAt: new Date(Date.now() - 86400000), // 1 day ago
+          createdAt: safeDate(new Date(Date.now() - 86400000)), // 1 day ago
         },
         {
           content: `Thanks for adding me! Looking forward to collaborating with everyone.`,
           chatId: groupChat.id,
           senderId: user1.id,
           messageType: 'TEXT',
-          createdAt: new Date(Date.now() - 86400000 + 3600000), // 1 day ago + 1 hour
+          createdAt: safeDate(new Date(Date.now() - 86400000 + 3600000)), // 1 day ago + 1 hour
         },
         {
           content: `Hello everyone! Excited to be part of this group!`,
           chatId: groupChat.id,
           senderId: user2.id,
           messageType: 'TEXT',
-          createdAt: new Date(Date.now() - 86400000 + 7200000), // 1 day ago + 2 hours
+          createdAt: safeDate(new Date(Date.now() - 86400000 + 7200000)), // 1 day ago + 2 hours
         },
         {
           content: `Let's use this space to share updates and collaborate on platform features.`,
           chatId: groupChat.id,
           senderId: admin.id,
           messageType: 'TEXT',
-          createdAt: new Date(Date.now() - 43200000), // 12 hours ago
+          createdAt: safeDate(new Date(Date.now() - 43200000)), // 12 hours ago
         },
       ];
 
@@ -512,10 +575,10 @@ async function main() {
         await prisma.message.create({ data: message });
       }
 
-      // Update the lastMessageAt field
+      // Update the lastMessageAt field with safe date
       await prisma.chat.update({
         where: { id: groupChat.id },
-        data: { lastMessageAt: new Date(Date.now() - 43200000) }
+        data: { lastMessageAt: safeDate(new Date(Date.now() - 43200000)) }
       });
 
       console.log('Created group chat with all users');
