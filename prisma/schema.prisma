@@ -2608,3 +2608,5 @@ model UserChatPreference {
 
   @@index([userId])
 }
+
+//wow
