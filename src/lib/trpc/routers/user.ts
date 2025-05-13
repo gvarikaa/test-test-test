@@ -3,6 +3,56 @@ import { router, publicProcedure, protectedProcedure } from '../server';
 import { TRPCError } from '@trpc/server';
 
 export const userRouter = router({
+  getUsers: protectedProcedure
+    .input(
+      z.object({
+        limit: z.number().min(1).max(100).default(5),
+        cursor: z.string().nullish(),
+      }).optional().default({
+        limit: 5,
+        cursor: null
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { limit, cursor } = input;
+      
+      const whereClause: any = {};
+      
+      // Exclude the current user
+      whereClause.id = { not: ctx.session.user.id };
+      
+      // If cursor is provided, only fetch users created after the cursor
+      if (cursor) {
+        whereClause.id = { ...whereClause.id, lt: cursor };
+      }
+      
+      const users = await ctx.db.user.findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          image: true,
+          createdAt: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        take: limit + 1,
+      });
+      
+      let nextCursor: typeof cursor = undefined;
+      if (users.length > limit) {
+        const nextItem = users.pop();
+        nextCursor = nextItem!.id;
+      }
+      
+      return {
+        users,
+        nextCursor,
+      };
+    }),
+    
   getAll: publicProcedure.query(async ({ ctx }) => {
     return await ctx.db.user.findMany({
       select: {

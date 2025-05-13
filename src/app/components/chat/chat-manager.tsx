@@ -74,8 +74,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setErrorState(null);
 
     try {
+      // Validate userId to ensure it's not undefined or null
+      if (!userId || typeof userId !== 'string') {
+        throw new Error('Invalid userId provided');
+      }
+
+      // Create a proper input object for the mutation
+      const input = { userId };
+      console.log('ChatProvider: Creating chat with input:', input);
+      
       createChat(
-        { userId },
+        input,
         {
           onError: (err) => {
             console.error("Failed to start chat:", err);
@@ -141,11 +150,14 @@ export function ChatManager() {
 
       // Check if chat already exists in activeChats
       if (!activeChats.some((chat) => chat.id === newChat.id)) {
+        // Find the other user in participants
+        const otherParticipant = newChat.participants.find(
+          (p) => p.user.id !== session?.user?.id
+        );
+        
         const chatToAdd = {
           id: newChat.id,
-          otherUser: newChat.participants.find(
-            (p) => p.userId !== session?.user?.id
-          )?.user || { id: "", name: "User", image: null },
+          otherUser: otherParticipant?.user || { id: "", name: "User", image: null },
           unreadCount: 0,
         };
 
@@ -158,22 +170,43 @@ export function ChatManager() {
     },
     onError: (error) => {
       console.error('Error creating chat:', error);
+      
+      // Log detailed error for debugging
+      if (error instanceof Error) {
+        console.error('Error details:', {
+          message: error.message,
+          name: error.name,
+          cause: error.cause,
+          stack: error.stack
+        });
+      }
 
-      // If we get an error, create a placeholder chat for testing
-      // This avoids blocking the UI when backend is not working
-      const testId = `test-${Date.now()}`;
-      const placeholderChat = {
-        id: testId,
-        otherUser: {
+      // If the error is related to a specific user, show a detailed error message
+      if (error.message.includes('User not found')) {
+        // This is likely due to trying to chat with a user that doesn't exist in the database
+        console.error('Cannot start chat: User ID not found in database');
+        setErrorMessage('მომხმარებელი ვერ მოიძებნა ბაზაში. გთხოვთ სცადოთ სხვა მომხმარებელი.');
+        setTimeout(() => setErrorMessage(null), 5000);
+      } else if (error.message.includes('cannot create a chat')) {
+        setErrorMessage(error.message);
+        setTimeout(() => setErrorMessage(null), 5000);
+      } else {
+        // For other errors, create a placeholder chat for testing
+        // This avoids blocking the UI when backend is not working
+        const testId = `test-${Date.now()}`;
+        const placeholderChat = {
           id: testId,
-          name: "Fallback Chat",
-          image: "https://ui-avatars.com/api/?name=Fallback+Chat&background=FF5722&color=fff"
-        },
-        unreadCount: 0,
-      };
+          otherUser: {
+            id: testId,
+            name: "Fallback Chat",
+            image: "https://ui-avatars.com/api/?name=Fallback+Chat&background=FF5722&color=fff"
+          },
+          unreadCount: 0,
+        };
 
-      console.log('Creating fallback chat due to API error:', placeholderChat);
-      setActiveChats(prev => [...prev, placeholderChat]);
+        console.log('Creating fallback chat due to API error:', placeholderChat);
+        setActiveChats(prev => [...prev, placeholderChat]);
+      }
     }
   });
 
@@ -181,35 +214,54 @@ export function ChatManager() {
   const startChat = (userId: string) => {
     console.log(`ChatManager: Starting chat with user ${userId}`);
 
-    // Create a testing chat first to show UI while API is processing
-    const testId = `test-${Date.now()}`;
-    const placeholderChat = {
-      id: testId,
-      otherUser: {
-        id: userId,
-        name: `Chat ${userId.slice(-4)}`,
-        image: "https://ui-avatars.com/api/?name=New+Chat&background=4CAF50&color=fff"
-      },
-      unreadCount: 0,
-    };
+    // Clear error message if there was one
+    setErrorMessage(null);
 
-    console.log('Adding placeholder chat immediately:', placeholderChat);
-    setActiveChats(prev => [...prev, placeholderChat]);
+    // Validate user ID before proceeding
+    if (!userId || typeof userId !== 'string') {
+      setErrorMessage('Invalid user ID provided');
+      return;
+    }
 
-    // Then try the API call if user is logged in
-    if (session?.user?.id && userId !== session.user.id) {
+    // Don't allow starting chat with yourself
+    if (session?.user?.id && userId === session.user.id) {
+      setErrorMessage('You cannot start a chat with yourself');
+      return;
+    }
+
+    // Check if we already have a chat with this user
+    const existingChat = activeChats.find(chat => chat.otherUser.id === userId);
+    if (existingChat) {
+      // If minimized, un-minimize it
+      if (minimizedChats.includes(existingChat.id)) {
+        setMinimizedChats(prev => prev.filter(id => id !== existingChat.id));
+      }
+      return;
+    }
+
+    // If user is logged in, make the API call
+    if (session?.user?.id) {
       try {
         console.log('Calling createChat API with userId:', userId);
-        createChat({ userId });
+        
+        // Make sure userId is a valid string and not undefined
+        if (!userId || typeof userId !== 'string') {
+          throw new Error('Invalid userId provided');
+        }
+        
+        // Pass userId as an object parameter to follow tRPC's expected format
+        // Double-check that we're creating a proper object here
+        const input = { userId };
+        console.log('Input object for createChat:', input);
+        
+        createChat(input);
       } catch (err) {
         console.error('Error calling createChat:', err);
+        setErrorMessage('An error occurred while creating the chat');
       }
     } else {
-      console.warn('Session or user validation failed:', {
-        hasSession: !!session,
-        hasUserId: !!session?.user?.id,
-        isOwnId: userId === session?.user?.id
-      });
+      console.warn('Session not available - cannot create chat');
+      setErrorMessage('You must be logged in to start a chat');
     }
   };
 
@@ -225,7 +277,9 @@ export function ChatManager() {
 
       if (!chatExists && data.senderId) {
         // Fetch the chat details and add it to active chats
-        createChat({ userId: data.senderId });
+        const input = { userId: data.senderId };
+        console.log('Creating chat from Pusher event with input:', input);
+        createChat(input);
       } else {
         // Update unread count for this chat
         setActiveChats((prev) =>

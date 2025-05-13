@@ -465,11 +465,32 @@ export const chatRouter = router({
   createOrGetChat: protectedProcedure
     .input(
       z.object({
-        userId: z.string(),
+        userId: z.string({
+          required_error: "userId is required", 
+          invalid_type_error: "userId must be a string",
+        }),
       })
     )
     .mutation(async ({ ctx, input }) => {
+      // Log the received input for debugging
+      console.log('createOrGetChat received input:', input);
+      
+      // Extra validation to ensure we have a userId
+      if (!input || typeof input !== 'object') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Invalid input: expected an object with userId',
+        });
+      }
+      
       const { userId } = input;
+      
+      if (!userId || typeof userId !== 'string') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Invalid userId: expected a non-empty string',
+        });
+      }
       
       // Don't allow creating a chat with yourself
       if (userId === ctx.session.user.id) {
@@ -479,86 +500,226 @@ export const chatRouter = router({
         });
       }
       
-      // Check if a direct chat already exists between these users
-      const existingChat = await ctx.db.chat.findFirst({
-        where: {
-          isGroup: false,
-          participants: {
-            every: {
-              userId: {
-                in: [ctx.session.user.id, userId],
+      try {
+        // First check if the other user exists
+        const otherUser = await ctx.db.user.findUnique({
+          where: { id: userId },
+          select: { id: true, name: true, image: true },
+        });
+        
+        if (!otherUser) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'User not found',
+          });
+        }
+        
+        // Check if a direct chat already exists between these users
+        // Get all the participant IDs where the current user is a participant
+        const userChats = await ctx.db.chatParticipant.findMany({
+          where: {
+            userId: ctx.session.user.id,
+          },
+          select: {
+            chatId: true,
+          },
+        });
+        
+        const userChatIds = userChats.map(chat => chat.chatId);
+        
+        // Get all the participant IDs where the other user is a participant
+        const otherUserChats = await ctx.db.chatParticipant.findMany({
+          where: {
+            userId: userId,
+          },
+          select: {
+            chatId: true,
+          },
+        });
+        
+        const otherUserChatIds = otherUserChats.map(chat => chat.chatId);
+        
+        // Find chat IDs that are common to both users (potential direct chats)
+        const commonChatIds = userChatIds.filter(id => otherUserChatIds.includes(id));
+        
+        // Now find a direct chat (not a group) with exactly 2 participants
+        let existingChat = null;
+        
+        if (commonChatIds.length > 0) {
+          for (const chatId of commonChatIds) {
+            const chat = await ctx.db.chat.findFirst({
+              where: {
+                id: chatId,
+                isGroup: false,
               },
+              include: {
+                participants: {
+                  include: {
+                    user: {
+                      select: {
+                        id: true,
+                        name: true,
+                        image: true,
+                      },
+                    },
+                  },
+                },
+              },
+            });
+            
+            if (chat && chat.participants.length === 2) {
+              existingChat = chat;
+              break;
+            }
+          }
+        }
+        
+        if (existingChat) {
+          console.log('Found existing chat:', existingChat.id);
+          
+          // Safely convert date objects or use fallbacks for missing dates
+          const safeDate = (date: Date | null | undefined) => {
+            if (!date) return null;
+            try {
+              return date.toISOString();
+            } catch (e) {
+              console.error('Error converting date to ISO string:', e);
+              return new Date().toISOString(); // Fallback to current date
+            }
+          };
+          
+          // Handle the case where Date objects might be serialized already
+          const safeParticipant = (p: any) => {
+            // Deep clone to avoid mutation
+            const participant = { ...p };
+            
+            // Check if dates are already strings
+            if (typeof participant.createdAt === 'string') {
+              return participant;
+            }
+            
+            return {
+              ...participant,
+              createdAt: safeDate(participant.createdAt) || new Date().toISOString(),
+              updatedAt: safeDate(participant.updatedAt) || new Date().toISOString(),
+              lastActiveAt: participant.lastActiveAt ? safeDate(participant.lastActiveAt) : null,
+              muteUntil: participant.muteUntil ? safeDate(participant.muteUntil) : null,
+              leftAt: participant.leftAt ? safeDate(participant.leftAt) : null,
+            };
+          };
+          
+          return {
+            ...existingChat,
+            createdAt: safeDate(existingChat.createdAt) || new Date().toISOString(),
+            updatedAt: safeDate(existingChat.updatedAt) || new Date().toISOString(),
+            participants: existingChat.participants.map(safeParticipant),
+          };
+        }
+        
+        // Create a new chat
+        const newChat = await ctx.db.chat.create({
+          data: {
+            isGroup: false,
+            participants: {
+              create: [
+                {
+                  userId: ctx.session.user.id,
+                  role: 'ADMIN',
+                },
+                {
+                  userId,
+                  role: 'MEMBER',
+                },
+              ],
             },
           },
-          // Make sure there are exactly 2 participants
-          _count: {
-            participants: 2,
-          },
-        },
-        include: {
-          participants: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  name: true,
-                  image: true,
+          include: {
+            participants: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    image: true,
+                  },
                 },
               },
             },
           },
-        },
-      });
-      
-      if (existingChat) {
-        return existingChat;
-      }
-      
-      // Check if the other user exists
-      const otherUser = await ctx.db.user.findUnique({
-        where: { id: userId },
-      });
-      
-      if (!otherUser) {
+        });
+        
+        console.log('Created new chat:', newChat.id);
+        
+        // Use the same safe date conversion functions for the new chat
+        const safeDate = (date: Date | null | undefined) => {
+          if (!date) return null;
+          try {
+            return date.toISOString();
+          } catch (e) {
+            console.error('Error converting date to ISO string:', e);
+            return new Date().toISOString(); // Fallback to current date
+          }
+        };
+        
+        const safeParticipant = (p: any) => {
+          // Deep clone to avoid mutation
+          const participant = { ...p };
+          
+          // Check if dates are already strings
+          if (typeof participant.createdAt === 'string') {
+            return participant;
+          }
+          
+          return {
+            ...participant,
+            createdAt: safeDate(participant.createdAt) || new Date().toISOString(),
+            updatedAt: safeDate(participant.updatedAt) || new Date().toISOString(),
+            lastActiveAt: participant.lastActiveAt ? safeDate(participant.lastActiveAt) : null,
+            muteUntil: participant.muteUntil ? safeDate(participant.muteUntil) : null,
+            leftAt: participant.leftAt ? safeDate(participant.leftAt) : null,
+          };
+        };
+        
+        // Convert and return safely
+        return {
+          ...newChat,
+          createdAt: safeDate(newChat.createdAt) || new Date().toISOString(),
+          updatedAt: safeDate(newChat.updatedAt) || new Date().toISOString(),
+          participants: newChat.participants.map(safeParticipant),
+        };
+      } catch (error) {
+        console.error('Error in createOrGetChat:', error);
+        
+        // Log detailed error information
+        if (error instanceof Error) {
+          console.error('Error details:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+          });
+        }
+        
+        // For date conversion errors, provide more helpful messages
+        if (error instanceof TypeError && error.message.includes('toISOString')) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Error processing chat dates. Please try again.',
+            cause: error,
+          });
+        }
+        
+        // Re-throw TRPCErrors
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        
+        // For any other errors, wrap in a generic TRPC error
         throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'User not found',
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'An unexpected error occurred while processing your chat request.',
+          cause: error,
         });
       }
-      
-      // Create a new chat
-      const newChat = await ctx.db.chat.create({
-        data: {
-          isGroup: false,
-          participants: {
-            create: [
-              {
-                userId: ctx.session.user.id,
-                role: 'ADMIN',
-              },
-              {
-                userId,
-                role: 'MEMBER',
-              },
-            ],
-          },
-        },
-        include: {
-          participants: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  name: true,
-                  image: true,
-                },
-              },
-            },
-          },
-        },
-      });
-      
-      return newChat;
     }),
 
   // Voice calls

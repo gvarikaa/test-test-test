@@ -68,6 +68,7 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
               "x-trpc-skip-auth": "true",
             };
           },
+          transformer: superjson,
         }),
       ],
     })

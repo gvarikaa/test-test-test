@@ -44,6 +44,27 @@ const t = initTRPC.context<typeof createTRPCContext>().create({
         stack: error.stack,
         cause: error.cause,
       });
+      
+      // Enhanced logging for ZodError to help diagnose validation issues
+      if (error.cause instanceof ZodError) {
+        const zodError = error.cause;
+        console.error('[ZodError Details]', {
+          issues: zodError.issues,
+          formErrors: zodError.flatten().formErrors,
+          fieldErrors: zodError.flatten().fieldErrors,
+        });
+        
+        // Show more detailed information about expected vs received
+        zodError.issues.forEach((issue, i) => {
+          console.error(`[ZodIssue ${i}]`, {
+            code: issue.code,
+            path: issue.path,
+            message: issue.message,
+            expected: issue.expected,
+            received: issue.received,
+          });
+        });
+      }
     }
 
     return {
