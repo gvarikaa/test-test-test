@@ -6,6 +6,7 @@ import { api } from "@/lib/trpc/api";
 import { clientPusher, getUserChannel, PusherEvents } from "@/lib/pusher";
 import { EnhancedChatWindow } from "./enhanced-chat-window";
 import { MessageSquare } from "lucide-react";
+import { chatEventBus, CHAT_EVENTS } from "@/lib/chat-events";
 
 type User = {
   id: string;
@@ -22,13 +23,10 @@ type Chat = {
 
 // Define context for chat functions
 type ChatContextType = {
-  startChat: (userId: string) => void;
+  startChat: (userId: string, onSuccess?: (chatId: string, user: User) => void) => void;
   error: { message: string; userId?: string } | null;
   isLoading: boolean;
   clearError: () => void;
-  newChatId: string | null;
-  newChatUser: User | null;
-  tempChatId: string | null;
 };
 
 // Create the context
@@ -43,31 +41,16 @@ export const useChatManager = () => {
   return context;
 };
 
+// Reference to the ChatManager instance
+let chatManagerRef: any = null;
+
 // ChatProvider wrapper component for global access
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [errorState, setErrorState] = useState<{ message: string; userId?: string } | null>(null);
-  const [newChatId, setNewChatId] = useState<string | null>(null);
-  const [newChatUser, setNewChatUser] = useState<User | null>(null);
-  const [tempChatId, setTempChatId] = useState<string | null>(null);
   const { data: session, status: sessionStatus } = useSession();
-  const { mutate: createChat, isLoading, isError, error } = api.chat.createOrGetChat.useMutation({
-    onSuccess: (newChat) => {
-      // Find the other user in participants
-      const otherParticipant = newChat.participants.find(
-        (p) => p.user.id !== session?.user?.id
-      );
-      
-      if (otherParticipant) {
-        setNewChatId(newChat.id);
-        setNewChatUser(otherParticipant.user);
-        setTempChatId(null); // Clear temp ID on success
-      }
-    },
-    onError: (err) => {
-      console.error("Error creating chat:", err);
-      setErrorState({ message: err.message });
-    }
-  });
+  
+  // Make mutation result available through callback pattern
+  const { mutate: createChat, isLoading } = api.chat.createOrGetChat.useMutation();
 
   // Reset error when session changes
   useEffect(() => {
@@ -79,7 +62,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, [sessionStatus]); // Don't include errorState in dependencies
 
   // Function to start a chat with a user with improved error handling
-  const startChat = (userId: string) => {
+  const startChat = (userId: string, onSuccess?: (chatId: string, user: User) => void) => {
     if (!session?.user?.id) {
       setErrorState({ message: "შესვლა საჭიროა ჩეთის დასაწყებად", userId });
       return;
@@ -98,29 +81,30 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       if (!userId || typeof userId !== 'string') {
         throw new Error('Invalid userId provided');
       }
-      
-      // Create a temporary chat ID
-      const tempId = `temp-${Date.now()}-${userId}`;
-      setTempChatId(tempId);
 
       // Create a proper input object for the mutation
       const input = { userId };
       console.log('ChatProvider: Creating chat with input:', input);
       
-      createChat(
-        input,
-        {
-          onError: (err) => {
-            console.error("Failed to start chat:", err);
-            setErrorState({ message: "ჩეთის დაწყება ვერ მოხერხდა, გთხოვთ სცადოთ მოგვიანებით", userId });
-            setTempChatId(null); // Clear temp ID on error
+      createChat(input, {
+        onSuccess: (newChat) => {
+          // Find the other user in participants
+          const otherParticipant = newChat.participants.find(
+            (p) => p.user.id !== session?.user?.id
+          );
+          
+          if (otherParticipant && onSuccess) {
+            onSuccess(newChat.id, otherParticipant.user);
           }
+        },
+        onError: (err) => {
+          console.error("Failed to start chat:", err);
+          setErrorState({ message: "ჩეთის დაწყება ვერ მოხერხდა, გთხოვთ სცადოთ მოგვიანებით", userId });
         }
-      );
+      });
     } catch (err) {
       console.error("Unexpected error creating chat:", err);
       setErrorState({ message: "დაფიქსირდა შეცდომა. გთხოვთ სცადოთ მოგვიანებით.", userId });
-      setTempChatId(null); // Clear temp ID on error
     }
   };
 
@@ -130,10 +114,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     startChat,
     error: errorState,
     isLoading,
-    clearError,
-    newChatId,
-    newChatUser,
-    tempChatId
+    clearError
   };
 
   return (
@@ -149,59 +130,87 @@ export function ChatManager() {
   const [minimizedChats, setMinimizedChats] = useState<string[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<Record<string, boolean>>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [localPendingChats, setLocalPendingChats] = useState<Map<string, User>>(new Map());
   const { data: session, status: sessionStatus } = useSession();
-  const { newChatId, newChatUser, tempChatId, startChat } = useChatManager();
+  const { startChat: globalStartChat } = useChatManager();
+  
+  console.log('ChatManager: activeChats:', activeChats);
+
+  // Function to start a chat locally (wrapper around globalStartChat)
+  const startChat = (userId: string) => {
+    // Check if we already have an active chat with this user
+    const existingChat = activeChats.find(chat => chat.otherUser.id === userId);
+    if (existingChat) {
+      console.log('Chat already exists with user:', userId);
+      return;
+    }
+
+    // Create temporary chat with local user data
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(7)}-${userId}`;
+    const tempUser: User = {
+      id: userId,
+      name: 'Loading...',
+      image: `https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff`
+    };
+    
+    // Add to local pending chats
+    setLocalPendingChats(prev => new Map(prev).set(tempId, tempUser));
+    
+    // Add temporary chat immediately
+    const tempChat = {
+      id: tempId,
+      otherUser: tempUser,
+      unreadCount: 0,
+    };
+    
+    console.log('Adding temporary chat locally:', tempChat);
+    setActiveChats((prev) => [...prev, tempChat]);
+    
+    // Call global startChat with callback to handle success
+    globalStartChat(userId, (chatId, realUser) => {
+      console.log('Chat created successfully:', { chatId, realUser });
+      
+      // Replace temp chat with real chat
+      setActiveChats((prev) => {
+        return prev.map(chat => {
+          if (chat.id === tempId) {
+            console.log('Replacing temp chat with real chat:', chatId);
+            return {
+              id: chatId,
+              otherUser: realUser,
+              unreadCount: 0,
+            };
+          }
+          return chat;
+        });
+      });
+      
+      // Remove from pending chats
+      setLocalPendingChats(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(tempId);
+        return newMap;
+      });
+      
+      // Make sure the chat is not minimized
+      setMinimizedChats((prev) => prev.filter((id) => id !== chatId));
+    });
+  };
 
   // Reset error state when session changes
   useEffect(() => {
     setErrorMessage(null);
   }, [sessionStatus]);
-
-  // Watch for new chats from the context
+  
+  // Listen for chat events from other components
   useEffect(() => {
-    console.log('New chat context update:', { newChatId, newChatUser, tempChatId });
+    const unsubscribe = chatEventBus.on(CHAT_EVENTS.START_CHAT, ({ userId }) => {
+      console.log('ChatManager: Received START_CHAT event for user:', userId);
+      startChat(userId);
+    });
     
-    // Add temporary chat immediately when requested
-    if (tempChatId && newChatUser && !newChatId) {
-      if (!activeChats.some((chat) => chat.id === tempChatId || chat.otherUser.id === newChatUser.id)) {
-        const tempChat = {
-          id: tempChatId,
-          otherUser: newChatUser,
-          unreadCount: 0,
-        };
-        
-        console.log('Adding temporary chat:', tempChat);
-        setActiveChats((prev) => [...prev, tempChat]);
-      }
-    }
-    
-    // Replace temp chat with real chat when it's created
-    if (newChatId && newChatUser) {
-      setActiveChats((prev) => {
-        // Remove any temp chat for this user if it exists
-        const filtered = prev.filter((chat) => 
-          !chat.id.startsWith('temp-') || chat.otherUser.id !== newChatUser.id
-        );
-        
-        // Check if real chat already exists
-        if (!filtered.some((chat) => chat.id === newChatId)) {
-          const realChat = {
-            id: newChatId,
-            otherUser: newChatUser,
-            unreadCount: 0,
-          };
-          
-          console.log('Replacing temp chat with real chat:', realChat);
-          return [...filtered, realChat];
-        }
-        
-        return filtered;
-      });
-      
-      // Make sure the chat is not minimized
-      setMinimizedChats((prev) => prev.filter((id) => id !== newChatId));
-    }
-  }, [newChatId, newChatUser, tempChatId]);
+    return unsubscribe;
+  }, [startChat]);
 
   // trpc query to get recent chats with proper error handling
   const { data: chatData, error: chatDataError, isError: isChatDataError, isLoading: isChatDataLoading } = api.chat.getRecentChats.useQuery(

@@ -1,5 +1,8 @@
 // Demo messages for when we're using demo contacts
-export const getDemoMessages = (contactName: string, currentUserName: string = 'You'): any[] => {
+export const getDemoMessages = (contactName: string, currentUserName: string = 'You', uniqueId?: string): any[] => {
+  // Generate unique identifier based on contact name or provide a unique ID
+  const chatIdentifier = uniqueId || `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+  
   // Generate message times from the past few hours to now
   const getTimes = (count: number) => {
     const now = new Date();
@@ -17,7 +20,7 @@ export const getDemoMessages = (contactName: string, currentUserName: string = '
   // General messages that can work for any contact
   const messages = [
     { 
-      id: `demo-1-${contactName}`,
+      id: `demo-1-${chatIdentifier}`,
       content: `Hi ${currentUserName}, how are you today?`,
       createdAt: times[0],
       senderId: 'demo-contact',
@@ -30,7 +33,7 @@ export const getDemoMessages = (contactName: string, currentUserName: string = '
       }
     },
     {
-      id: `demo-2-${contactName}`,
+      id: `demo-2-${chatIdentifier}`,
       content: "I'm doing well, thanks for asking! How about you?",
       createdAt: times[1],
       senderId: 'current-user',
@@ -43,7 +46,7 @@ export const getDemoMessages = (contactName: string, currentUserName: string = '
       }
     },
     {
-      id: `demo-3-${contactName}`,
+      id: `demo-3-${chatIdentifier}`,
       content: "Everything's going great! I've been checking out the platform's new features.",
       createdAt: times[2],
       senderId: 'demo-contact',
@@ -92,11 +95,13 @@ export const addDemoMessage = (
   content: string,
   isCurrentUser: boolean,
   contactName: string,
-  currentUserName: string = 'You'
+  currentUserName: string = 'You',
+  uniqueId?: string
 ): any => {
   const lastMessage = messages[messages.length - 1];
   const now = new Date();
-  const messageId = `demo-${messages.length + 1}-${isCurrentUser ? 'user' : contactName}`;
+  const chatIdentifier = uniqueId || `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+  const messageId = `demo-${messages.length + 1}-${chatIdentifier}-${isCurrentUser ? 'user' : 'contact'}`;
   
   return {
     id: messageId,

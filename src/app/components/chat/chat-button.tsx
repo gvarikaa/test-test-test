@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { MessageSquare } from 'lucide-react';
-import { useChatManager } from './chat-manager';
+import { chatEventBus } from '@/lib/chat-events';
 
 interface ChatButtonProps {
   userId: string;
@@ -19,29 +19,24 @@ export function ChatButton({
   size = 'md',
   label 
 }: ChatButtonProps) {
-  // Get the chat manager context with error handling
-  const { startChat, error, isLoading, clearError } = useChatManager();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
   const [showError, setShowError] = useState(false);
-
-  // Check for errors related to this specific user
-  useEffect(() => {
-    if (error && error.userId === userId) {
-      setShowError(true);
-      // Auto-hide error after 3 seconds
-      const timer = setTimeout(() => {
-        setShowError(false);
-        clearError();
-      }, 3000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [error, userId, clearError]);
 
   // Handle click to start chat
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    startChat(userId);
+    console.log('ChatButton: Starting chat with user:', userId);
+    setError(null);
+    setShowError(false);
+    try {
+      chatEventBus.startChat(userId);
+    } catch (err) {
+      setError(err as Error);
+      setShowError(true);
+      setTimeout(() => setShowError(false), 3000);
+    }
   };
 
   // Size classes

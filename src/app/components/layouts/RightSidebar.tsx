@@ -3,13 +3,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import { useSession } from "next-auth/react";
-import { useChatManager } from "@/app/components/chat/chat-context";
 import { api } from "@/lib/trpc/api";
 import { clientPusher, PusherEvents, getUserChannel } from "@/lib/pusher";
 import { ChatButton } from "@/app/components/chat/chat-button";
+import { chatEventBus } from "@/lib/chat-events";
 
 function RightSidebar() {
-  const { startChat } = useChatManager();
   const { data: session, status } = useSession();
   const [onlineUsers, setOnlineUsers] = useState<Record<string, boolean>>({});
   
@@ -122,14 +121,18 @@ function RightSidebar() {
           ) : (
             contacts.map((contact) => (
               <div key={contact.id} className="group">
-                <div className="flex w-full items-center gap-3 rounded-lg px-3 py-2 hover:bg-gray-800/40 cursor-pointer">
-                  <div 
-                    className="flex items-center gap-3 flex-1"
-                    onClick={() => {
-                      console.log('RightSidebar: Starting chat with user', contact);
-                      startChat(contact.id);
-                    }}
-                  >
+                <div 
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 hover:bg-gray-800/40 cursor-pointer"
+                  onClick={(e) => {
+                    // Don't start chat if clicking on the chat button
+                    if ((e.target as HTMLElement).closest('button')) {
+                      return;
+                    }
+                    console.log('RightSidebar: Starting chat with user', contact);
+                    chatEventBus.startChat(contact.id);
+                  }}
+                >
+                  <div className="flex items-center gap-3 flex-1">
                     <div className="relative h-10 w-10">
                       <Image
                         src={contact.image}

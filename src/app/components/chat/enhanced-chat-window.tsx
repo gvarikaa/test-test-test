@@ -79,11 +79,15 @@ export function EnhancedChatWindow({
   // Log props for debugging
   console.log('EnhancedChatWindow props:', { chatId, otherUser, isMinimized });
   
+  // Check if this is a temporary chat ID
+  const isTemporaryChat = chatId && chatId.startsWith('temp-');
+  const isDemoChat = chatId && chatId.startsWith('demo-');
+  
   // Check if this is a valid persisted chat ID (not temporary)
   const isValidChatId = chatId && 
                        chatId.length > 0 && 
-                       !chatId.startsWith('temp-') && 
-                       !chatId.startsWith('demo-');
+                       !isTemporaryChat && 
+                       !isDemoChat;
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -166,7 +170,7 @@ export function EnhancedChatWindow({
   
   const { data, isLoading: messagesLoading } = api.chat.getMessages.useQuery(
     { chatId, limit: 50 },
-    { enabled: !isDemo && !!session?.user?.id && !!chatId }
+    { enabled: !isDemo && !isTemporaryChat && !!session?.user?.id && !!chatId && isValidChatId }
   );
   
   const { mutate: sendMessageMutation } = api.chat.sendMessage.useMutation({
@@ -175,6 +179,9 @@ export function EnhancedChatWindow({
       scrollToBottom();
       setReplyToMessage(null);
     },
+    onError: (error) => {
+      console.error('Error sending message:', error);
+    }
   });
   
   const { mutate: markAsRead } = api.chat.markAsRead.useMutation();
@@ -200,8 +207,9 @@ export function EnhancedChatWindow({
   
   // Initialize messages
   useEffect(() => {
-    if (isDemo) {
-      setMessages(getDemoMessages(otherUser.name || 'Demo User', session?.user?.name || 'You'));
+    if (isDemo || isTemporaryChat) {
+      // For demo or temporary chats, show an empty chat or loading state
+      setMessages([]);
       setIsLoading(false);
       scrollToBottom();
     } else if (data?.messages) {
@@ -213,11 +221,11 @@ export function EnhancedChatWindow({
         markAsRead({ chatId });
       }
     }
-  }, [data, chatId, markAsRead, isDemo, otherUser.name, session?.user?.name]);
+  }, [data, chatId, markAsRead, isDemo, isTemporaryChat, otherUser.name, session?.user?.name]);
   
   // Set up Pusher subscriptions
   useEffect(() => {
-    if (isDemo || !session?.user?.id || !chatId) return;
+    if (isDemo || isTemporaryChat || !session?.user?.id || !chatId) return;
 
     const channel = clientPusher.subscribe(getChatChannel(chatId));
     
@@ -293,7 +301,8 @@ export function EnhancedChatWindow({
         message.trim(),
         true,
         otherUser.name || 'Demo User',
-        session?.user?.name || 'You'
+        session?.user?.name || 'You',
+        chatId
       );
       
       setMessages(prev => [...prev, newDemoMessage]);
@@ -315,13 +324,20 @@ export function EnhancedChatWindow({
           randomResponse,
           false,
           otherUser.name || 'Demo User',
-          session?.user?.name || 'You'
+          session?.user?.name || 'You',
+          chatId
         );
         
         setMessages(prev => [...prev, demoResponse]);
         scrollToBottom();
       }, 1500);
     } else if (session?.user?.id) {
+      if (isTemporaryChat) {
+        // For temporary chats, show a message that we're waiting for the real chat to be created
+        console.log('Cannot send message yet - temporary chat being created');
+        return;
+      }
+      
       sendMessageMutation({
         chatId,
         content: message.trim(),
@@ -537,13 +553,13 @@ export function EnhancedChatWindow({
 
         {/* Messages area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-950">
-          {isLoading || messagesLoading ? (
+          {isLoading || (messagesLoading && !isTemporaryChat) ? (
             <div className="flex items-center justify-center h-full">
               <div className="animate-pulse text-gray-400">Loading messages...</div>
             </div>
           ) : messages.length === 0 ? (
             <div className="flex items-center justify-center h-full text-gray-400">
-              No messages yet
+              {isTemporaryChat ? 'Start a conversation...' : 'No messages yet'}
             </div>
           ) : (
             <>
