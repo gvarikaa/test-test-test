@@ -359,7 +359,7 @@ export const chatRouter = router({
         const userId = ctx.session.user.id;
         
         // Get all chat participants for the user
-        const participants = await ctx.db.ChatParticipant.findMany({
+        const participants = await ctx.db.chatParticipant.findMany({
           where: { userId },
           include: {
             chat: {
@@ -385,12 +385,12 @@ export const chatRouter = router({
           
           // Count unread messages in this chat
           if (lastMessage.id !== participant.lastReadMessageId) {
-            const unreadCount = await ctx.db.Message.count({
+            const unreadCount = await ctx.db.message.count({
               where: {
                 chatId: chat.id,
                 createdAt: {
                   gt: participant.lastReadMessageId ? 
-                    (await ctx.db.Message.findUnique({
+                    (await ctx.db.message.findUnique({
                       where: { id: participant.lastReadMessageId },
                       select: { createdAt: true },
                     }))?.createdAt : 
@@ -531,7 +531,7 @@ export const chatRouter = router({
       const { chatId, limit, cursor } = input;
       
       // Check if the user is a participant in this chat
-      const participant = await ctx.db.ChatParticipant.findUnique({
+      const participant = await ctx.db.chatParticipant.findUnique({
         where: {
           chatId_userId: {
             chatId,
@@ -563,7 +563,7 @@ export const chatRouter = router({
       }
       
       // Get messages
-      const messages = await ctx.db.Message.findMany({
+      const messages = await ctx.db.message.findMany({
         take: limit + 1, // Fetch one extra to determine if there are more
         where: whereClause,
         orderBy: {
@@ -591,7 +591,7 @@ export const chatRouter = router({
       }
       
       // Count unread messages
-      const unreadCount = await ctx.db.Message.count({
+      const unreadCount = await ctx.db.message.count({
         where: {
           chatId,
           senderId: { not: ctx.session.user.id },
@@ -623,7 +623,7 @@ export const chatRouter = router({
       const { chatId, content, receiverId, mediaUrl, mediaType, thumbnailUrl } = input;
       
       // Check if the user is a participant in this chat
-      const participant = await ctx.db.ChatParticipant.findUnique({
+      const participant = await ctx.db.chatParticipant.findUnique({
         where: {
           chatId_userId: {
             chatId,
@@ -662,7 +662,7 @@ export const chatRouter = router({
         }];
       }
       
-      const message = await ctx.db.Message.create({
+      const message = await ctx.db.message.create({
         data: {
           ...messageData,
           media: {
@@ -702,7 +702,7 @@ export const chatRouter = router({
       );
       
       // Create a notification
-      await ctx.db.Notification.create({
+      await ctx.db.notification.create({
         data: {
           type: 'MESSAGE',
           content: mediaUrl ? 'Sent you media' : content.substring(0, 50) + (content.length > 50 ? '...' : ''),
@@ -739,7 +739,7 @@ export const chatRouter = router({
       const { chatId, messageId } = input;
       
       // Get the participant record
-      const participant = await ctx.db.ChatParticipant.findUnique({
+      const participant = await ctx.db.chatParticipant.findUnique({
         where: {
           chatId_userId: {
             chatId,
@@ -757,7 +757,7 @@ export const chatRouter = router({
       
       // If messageId is provided, mark that specific message as last read
       if (messageId) {
-        await ctx.db.ChatParticipant.update({
+        await ctx.db.chatParticipant.update({
           where: {
             id: participant.id,
           },
@@ -767,13 +767,13 @@ export const chatRouter = router({
         });
       } else {
         // Otherwise, get the latest message and mark it as read
-        const latestMessage = await ctx.db.Message.findFirst({
+        const latestMessage = await ctx.db.message.findFirst({
           where: { chatId },
           orderBy: { createdAt: 'desc' },
         });
         
         if (latestMessage) {
-          await ctx.db.ChatParticipant.update({
+          await ctx.db.chatParticipant.update({
             where: {
               id: participant.id,
             },
@@ -806,9 +806,9 @@ export const chatRouter = router({
       
       try {
         // Verify the message exists
-        const message = await ctx.db.Message.findUnique({
+        const message = await ctx.db.message.findUnique({
           where: { id: messageId },
-          include: { chat: { include: { participants: true } } },
+          include: { chat: { include: { users: true } } },
         });
         
         if (!message) {
@@ -819,7 +819,7 @@ export const chatRouter = router({
         }
         
         // Verify user has access to this chat
-        const isUserInChat = message.chat.participants.some(participant => participant.userId === ctx.session.user.id);
+        const isUserInChat = message.chat.users.some(user => user.id === ctx.session.user.id);
         if (!isUserInChat) {
           throw new TRPCError({
             code: 'FORBIDDEN',
@@ -828,7 +828,7 @@ export const chatRouter = router({
         }
         
         // Check if user already reacted with this emoji
-        const existingReaction = await ctx.db.MessageReaction.findFirst({
+        const existingReaction = await ctx.db.reaction.findFirst({
           where: {
             messageId,
             userId: ctx.session.user.id,
@@ -838,7 +838,7 @@ export const chatRouter = router({
         
         if (existingReaction) {
           // Remove reaction if already exists (toggle)
-          await ctx.db.MessageReaction.delete({
+          await ctx.db.reaction.delete({
             where: { id: existingReaction.id },
           });
           
@@ -852,7 +852,7 @@ export const chatRouter = router({
           return { action: 'removed', reaction: existingReaction };
         } else {
           // Add new reaction
-          const reaction = await ctx.db.MessageReaction.create({
+          const reaction = await ctx.db.reaction.create({
             data: {
               messageId,
               userId: ctx.session.user.id,
@@ -921,7 +921,7 @@ export const chatRouter = router({
       
       try {
         // First check if the other user exists
-        const otherUser = await ctx.db.User.findUnique({
+        const otherUser = await ctx.db.user.findUnique({
           where: { id: userId },
           select: { id: true, name: true, image: true },
         });
@@ -935,7 +935,7 @@ export const chatRouter = router({
         
         // Check if a direct chat already exists between these users
         // Get all the participant IDs where the current user is a participant
-        const userChats = await ctx.db.ChatParticipant.findMany({
+        const userChats = await ctx.db.chatParticipant.findMany({
           where: {
             userId: ctx.session.user.id,
           },
@@ -947,7 +947,7 @@ export const chatRouter = router({
         const userChatIds = userChats.map(chat => chat.chatId);
         
         // Get all the participant IDs where the other user is a participant
-        const otherUserChats = await ctx.db.ChatParticipant.findMany({
+        const otherUserChats = await ctx.db.chatParticipant.findMany({
           where: {
             userId: userId,
           },
@@ -1171,7 +1171,7 @@ export const chatRouter = router({
       const { chatId, type } = input;
 
       // Check if the user is a participant in this chat
-      const participant = await ctx.db.ChatParticipant.findUnique({
+      const participant = await ctx.db.chatParticipant.findUnique({
         where: {
           chatId_userId: {
             chatId,
@@ -1188,7 +1188,7 @@ export const chatRouter = router({
       }
 
       // Create a new call
-      const call = await ctx.db.Call.create({
+      const call = await ctx.db.call.create({
         data: {
           chatId,
           type: type as CallType,
@@ -1220,7 +1220,7 @@ export const chatRouter = router({
       );
 
       // Notify all chat participants individually
-      const chatParticipants = await ctx.db.ChatParticipant.findMany({
+      const chatParticipants = await ctx.db.chatParticipant.findMany({
         where: {
           chatId,
           userId: { not: ctx.session.user.id },
@@ -1248,7 +1248,7 @@ export const chatRouter = router({
       }
 
       // Create a message in the chat to indicate a call was started
-      const message = await ctx.db.Message.create({
+      const message = await ctx.db.message.create({
         data: {
           chatId,
           messageType: 'VOICE_CALL',
@@ -1266,7 +1266,7 @@ export const chatRouter = router({
       const { callId, hasVideo, hasAudio, isScreenSharing, deviceInfo } = input;
 
       // Get the call
-      const call = await ctx.db.Call.findUnique({
+      const call = await ctx.db.call.findUnique({
         where: { id: callId },
         include: {
           chat: {
@@ -1297,7 +1297,7 @@ export const chatRouter = router({
       }
 
       // Check if user is already in the call
-      const existingCallParticipant = await ctx.db.CallParticipant.findFirst({
+      const existingCallParticipant = await ctx.db.callParticipant.findFirst({
         where: {
           callId,
           participantId: chatParticipant.id,
@@ -1308,7 +1308,7 @@ export const chatRouter = router({
 
       if (existingCallParticipant) {
         // Update existing participant
-        callParticipant = await ctx.db.CallParticipant.update({
+        callParticipant = await ctx.db.callParticipant.update({
           where: { id: existingCallParticipant.id },
           data: {
             hasVideo,
@@ -1320,7 +1320,7 @@ export const chatRouter = router({
         });
       } else {
         // Add new participant
-        callParticipant = await ctx.db.CallParticipant.create({
+        callParticipant = await ctx.db.callParticipant.create({
           data: {
             callId,
             participantId: chatParticipant.id,
@@ -1334,7 +1334,7 @@ export const chatRouter = router({
 
       // If call was in RINGING status, update it to ONGOING
       if (call.status === 'RINGING') {
-        await ctx.db.Call.update({
+        await ctx.db.call.update({
           where: { id: callId },
           data: { status: 'ONGOING' },
         });
@@ -1362,7 +1362,7 @@ export const chatRouter = router({
       const { callId } = input;
 
       // Get the call
-      const call = await ctx.db.Call.findUnique({
+      const call = await ctx.db.call.findUnique({
         where: { id: callId },
         include: {
           chat: {
@@ -1393,7 +1393,7 @@ export const chatRouter = router({
       }
 
       // Update the call participant
-      const callParticipant = await ctx.db.CallParticipant.updateMany({
+      const callParticipant = await ctx.db.callParticipant.updateMany({
         where: {
           callId,
           participantId: chatParticipant.id,
@@ -1405,7 +1405,7 @@ export const chatRouter = router({
       });
 
       // Check if all participants have left
-      const activeParticipants = await ctx.db.CallParticipant.count({
+      const activeParticipants = await ctx.db.callParticipant.count({
         where: {
           callId,
           leftAt: null,
@@ -1418,7 +1418,7 @@ export const chatRouter = router({
         const startTime = call.startedAt;
         const durationSeconds = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
 
-        await ctx.db.Call.update({
+        await ctx.db.call.update({
           where: { id: callId },
           data: {
             status: 'ENDED',
@@ -1435,7 +1435,7 @@ export const chatRouter = router({
         );
 
         // Create a message in the chat to indicate the call ended
-        await ctx.db.Message.create({
+        await ctx.db.message.create({
           data: {
             chatId: call.chatId,
             messageType: 'SYSTEM',
@@ -1462,7 +1462,7 @@ export const chatRouter = router({
       const { messageId, targetLanguage } = input;
 
       // Get the message
-      const message = await ctx.db.Message.findUnique({
+      const message = await ctx.db.message.findUnique({
         where: { id: messageId },
         include: {
           chat: {
@@ -1518,7 +1518,7 @@ export const chatRouter = router({
         );
 
         // Update the message with translation
-        await ctx.db.Message.update({
+        await ctx.db.message.update({
           where: { id: messageId },
           data: {
             translatedText: translation.translatedText,
@@ -1548,7 +1548,7 @@ export const chatRouter = router({
       const { chatId, parentMessageId, title } = input;
 
       // Check if the user is a participant in this chat
-      const participant = await ctx.db.ChatParticipant.findUnique({
+      const participant = await ctx.db.chatParticipant.findUnique({
         where: {
           chatId_userId: {
             chatId,
@@ -1565,7 +1565,7 @@ export const chatRouter = router({
       }
 
       // Create thread
-      const thread = await ctx.db.ChatThread.create({
+      const thread = await ctx.db.chatThread.create({
         data: {
           chatId,
           parentMessageId,
@@ -1584,7 +1584,7 @@ export const chatRouter = router({
       const { chatId } = input;
 
       // Check if the user is a participant in this chat
-      const participant = await ctx.db.ChatParticipant.findUnique({
+      const participant = await ctx.db.chatParticipant.findUnique({
         where: {
           chatId_userId: {
             chatId,
@@ -1601,7 +1601,7 @@ export const chatRouter = router({
       }
 
       // Get threads
-      const threads = await ctx.db.ChatThread.findMany({
+      const threads = await ctx.db.chatThread.findMany({
         where: {
           chatId,
           isArchived: false,
@@ -1621,7 +1621,7 @@ export const chatRouter = router({
       const { chatId, question, options, allowMultiple, isAnonymous, expiresAt } = input;
 
       // Check if the user is a participant in this chat
-      const participant = await ctx.db.ChatParticipant.findUnique({
+      const participant = await ctx.db.chatParticipant.findUnique({
         where: {
           chatId_userId: {
             chatId,
@@ -1638,7 +1638,7 @@ export const chatRouter = router({
       }
 
       // Create poll
-      const poll = await ctx.db.ChatPoll.create({
+      const poll = await ctx.db.chatPoll.create({
         data: {
           chatId,
           question,
@@ -1661,7 +1661,7 @@ export const chatRouter = router({
       });
 
       // Create message with the poll
-      const message = await ctx.db.Message.create({
+      const message = await ctx.db.message.create({
         data: {
           chatId,
           messageType: 'POLL',
@@ -1694,7 +1694,7 @@ export const chatRouter = router({
       const { pollId, optionId } = input;
 
       // Get the poll
-      const poll = await ctx.db.ChatPoll.findUnique({
+      const poll = await ctx.db.chatPoll.findUnique({
         where: { id: pollId },
         include: {
           chat: {
@@ -1743,7 +1743,7 @@ export const chatRouter = router({
       // Check if multiple votes are allowed
       if (!poll.allowMultiple) {
         // Check if user has already voted
-        const existingVote = await ctx.db.ChatPollVote.findFirst({
+        const existingVote = await ctx.db.chatPollVote.findFirst({
           where: {
             pollId,
             userId: ctx.session.user.id,
@@ -1753,7 +1753,7 @@ export const chatRouter = router({
         if (existingVote) {
           // If same option, remove vote (toggle)
           if (existingVote.optionId === optionId) {
-            await ctx.db.ChatPollVote.delete({
+            await ctx.db.chatPollVote.delete({
               where: { id: existingVote.id },
             });
 
@@ -1767,7 +1767,7 @@ export const chatRouter = router({
             return { success: true, action: 'removed' };
           } else {
             // Update vote to new option
-            await ctx.db.ChatPollVote.update({
+            await ctx.db.chatPollVote.update({
               where: { id: existingVote.id },
               data: { optionId },
             });
@@ -1785,7 +1785,7 @@ export const chatRouter = router({
       }
 
       // Create new vote
-      await ctx.db.ChatPollVote.create({
+      await ctx.db.chatPollVote.create({
         data: {
           pollId,
           optionId,
@@ -1810,7 +1810,7 @@ export const chatRouter = router({
       const { pollId } = input;
 
       // Get the poll with options and votes
-      const poll = await ctx.db.ChatPoll.findUnique({
+      const poll = await ctx.db.chatPoll.findUnique({
         where: { id: pollId },
         include: {
           chat: {
@@ -1892,7 +1892,7 @@ export const chatRouter = router({
       const { chatId, mediaUrl, mediaTitle, mediaThumbnail, mediaType, mediaSource, mediaLengthSec } = input;
 
       // Check if the user is a participant in this chat
-      const participant = await ctx.db.ChatParticipant.findUnique({
+      const participant = await ctx.db.chatParticipant.findUnique({
         where: {
           chatId_userId: {
             chatId,
@@ -1909,7 +1909,7 @@ export const chatRouter = router({
       }
 
       // Create watch together session
-      const session = await ctx.db.WatchTogetherSession.create({
+      const session = await ctx.db.watchTogetherSession.create({
         data: {
           chatId,
           createdBy: ctx.session.user.id,
@@ -1926,7 +1926,7 @@ export const chatRouter = router({
       });
 
       // Create message
-      const message = await ctx.db.Message.create({
+      const message = await ctx.db.message.create({
         data: {
           chatId,
           messageType: 'WATCH_TOGETHER',
@@ -1952,7 +1952,7 @@ export const chatRouter = router({
       const { sessionId, currentPosition, isPlaying } = input;
 
       // Get the session
-      const session = await ctx.db.WatchTogetherSession.findUnique({
+      const session = await ctx.db.watchTogetherSession.findUnique({
         where: { id: sessionId },
       });
 
@@ -1964,7 +1964,7 @@ export const chatRouter = router({
       }
 
       // Check if the user is a participant in this chat
-      const participant = await ctx.db.ChatParticipant.findUnique({
+      const participant = await ctx.db.chatParticipant.findUnique({
         where: {
           chatId_userId: {
             chatId: session.chatId,
@@ -1981,7 +1981,7 @@ export const chatRouter = router({
       }
 
       // Update session
-      const updatedSession = await ctx.db.WatchTogetherSession.update({
+      const updatedSession = await ctx.db.watchTogetherSession.update({
         where: { id: sessionId },
         data: {
           currentPosition,
@@ -2007,7 +2007,7 @@ export const chatRouter = router({
       const { chatId, receiverId, strokes, backgroundColor, penColor, penWidth } = input;
 
       // Check if the user is a participant in this chat
-      const participant = await ctx.db.ChatParticipant.findUnique({
+      const participant = await ctx.db.chatParticipant.findUnique({
         where: {
           chatId_userId: {
             chatId,
@@ -2024,7 +2024,7 @@ export const chatRouter = router({
       }
 
       // Create the message
-      const message = await ctx.db.Message.create({
+      const message = await ctx.db.message.create({
         data: {
           chatId,
           messageType: 'HANDWRITING',
@@ -2035,7 +2035,7 @@ export const chatRouter = router({
       });
 
       // Create the handwriting data
-      const handwriting = await ctx.db.HandwritingMessage.create({
+      const handwriting = await ctx.db.handwritingMessage.create({
         data: {
           messageId: message.id,
           strokes,
@@ -2078,7 +2078,7 @@ export const chatRouter = router({
       const { chatId, receiverId, audioUrl, duration, transcript, waveform } = input;
 
       // Check if the user is a participant in this chat
-      const participant = await ctx.db.ChatParticipant.findUnique({
+      const participant = await ctx.db.chatParticipant.findUnique({
         where: {
           chatId_userId: {
             chatId,
@@ -2095,7 +2095,7 @@ export const chatRouter = router({
       }
 
       // Create the message
-      const message = await ctx.db.Message.create({
+      const message = await ctx.db.message.create({
         data: {
           chatId,
           messageType: 'VOICE_MESSAGE',
@@ -2141,7 +2141,7 @@ export const chatRouter = router({
       const userId = ctx.session.user.id;
 
       // Check if preferences already exist
-      const existingPreferences = await ctx.db.UserChatPreference.findUnique({
+      const existingPreferences = await ctx.db.userChatPreference.findUnique({
         where: { userId },
       });
 
@@ -2149,13 +2149,13 @@ export const chatRouter = router({
 
       if (existingPreferences) {
         // Update existing preferences
-        preferences = await ctx.db.UserChatPreference.update({
+        preferences = await ctx.db.userChatPreference.update({
           where: { userId },
           data: input,
         });
       } else {
         // Create new preferences
-        preferences = await ctx.db.UserChatPreference.create({
+        preferences = await ctx.db.userChatPreference.create({
           data: {
             userId,
             ...input,
@@ -2171,7 +2171,7 @@ export const chatRouter = router({
       const userId = ctx.session.user.id;
 
       // Get user preferences
-      const preferences = await ctx.db.UserChatPreference.findUnique({
+      const preferences = await ctx.db.userChatPreference.findUnique({
         where: { userId },
       });
 
@@ -2188,42 +2188,6 @@ export const chatRouter = router({
       }
 
       return preferences;
-    }),
-    
-  testDbConnection: protectedProcedure
-    .query(async ({ ctx }) => {
-      try {
-        console.log('Testing database connection...');
-        
-        // Test 1: Count users
-        const userCount = await ctx.db.User.count();
-        console.log('User count:', userCount);
-        
-        // Test 2: Get current user
-        const currentUser = await ctx.db.User.findUnique({
-          where: { id: ctx.session.user.id },
-          select: { id: true, name: true },
-        });
-        console.log('Current user:', currentUser);
-        
-        // Test 3: Count chats
-        const chatCount = await ctx.db.Chat.count();
-        console.log('Chat count:', chatCount);
-        
-        return {
-          success: true,
-          userCount,
-          currentUser,
-          chatCount,
-        };
-      } catch (error) {
-        console.error('Database test error:', error);
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Database connection test failed',
-          cause: error,
-        });
-      }
     }),
 
   getAllChats: protectedProcedure
@@ -2252,6 +2216,7 @@ export const chatRouter = router({
                     id: true,
                     name: true,
                     image: true,
+                    isOnline: true,
                   },
                 },
               },
@@ -2293,12 +2258,7 @@ export const chatRouter = router({
                 senderId: {
                   not: userId,
                 },
-                isDeleted: false,
-                readBy: {
-                  none: {
-                    userId: userId,
-                  },
-                },
+                isRead: false,
               },
             });
 
@@ -2318,69 +2278,6 @@ export const chatRouter = router({
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to fetch chats',
-        });
-      }
-    }),
-
-  getAllUsersWithChats: protectedProcedure
-    .input(
-      z.object({
-        limit: z.number().optional().default(50),
-        searchQuery: z.string().optional(),
-      })
-    )
-    .query(async ({ ctx, input }) => {
-      try {
-        console.log('getAllUsersWithChats called');
-        
-        const userId = ctx.session.user.id;
-        console.log('User ID:', userId);
-        
-        // Start with a very simple query
-        const userCount = await ctx.db.User.count();
-        console.log('Total user count:', userCount);
-        
-        // Test getting current user
-        const currentUser = await ctx.db.User.findUnique({
-          where: { id: userId },
-          select: { id: true, name: true },
-        });
-        console.log('Current user:', currentUser);
-        
-        // Now get all other users
-        const allUsers = await ctx.db.User.findMany({
-          where: { 
-            id: { not: userId },
-          },
-          select: {
-            id: true,
-            name: true,
-            image: true,
-          },
-          take: input.limit,
-        });
-        
-        console.log('Found other users:', allUsers.length);
-        
-        // For now, return a simplified response
-        return {
-          usersWithChats: allUsers.map(user => ({
-            user,
-            chat: null,
-          })),
-          totalCount: allUsers.length,
-        };
-        
-      } catch (error) {
-        console.error('Error in getAllUsersWithChats:', error);
-        console.error('Error type:', typeof error);
-        console.error('Error name:', error instanceof Error ? error.name : 'not an Error');
-        console.error('Error message:', error instanceof Error ? error.message : String(error));
-        
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to fetch users',
-          cause: error,
         });
       }
     }),

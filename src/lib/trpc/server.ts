@@ -235,7 +235,7 @@ const enforceUserIsAdmin = t.middleware(async ({ ctx, next }) => {
   }
 
   // Check if the user has admin role in the database
-  const user = await ctx.db.user.findUnique({
+  const user = await ctx.db.User.findUnique({
     where: { id: ctx.session.user.id },
     select: { id: true, email: true }
   });
