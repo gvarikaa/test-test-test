@@ -76,6 +76,8 @@ export function EnhancedChatWindow({
   onMinimize,
   onMaximize,
 }: EnhancedChatWindowProps) {
+  // Log props for debugging
+  console.log('EnhancedChatWindow props:', { chatId, otherUser, isMinimized });
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -109,10 +111,29 @@ export function EnhancedChatWindow({
   const isDemo = otherUser.isDemo || (chatId && chatId.startsWith('clb'));
   
   // TRPC queries and mutations
-  const { data: chatSettings } = api.chat.getChatSettings.useQuery(
-    { chatId },
-    { enabled: !isDemo && !!session?.user?.id }
-  );
+  // Note: ChatSettings query is temporarily disabled due to empty chatId issue
+  // const { data: chatSettings, error: chatSettingsError } = api.chat.getChatSettings.useQuery(
+  //   { chatId: chatId || '' },
+  //   { 
+  //     enabled: !isDemo && !!session?.user?.id && !!chatId && chatId !== 'demo' && chatId.length > 0,
+  //     retry: false,
+  //     retryOnMount: false,
+  //   }
+  // );
+  
+  // Use default settings for now
+  const chatSettings = {
+    enableVoiceCalls: true,
+    enableVideoCalls: true,
+    enableGroupCalls: true,
+    enableScreenSharing: true,
+    enableMessageThreads: true,
+    enableReactions: true,
+    enablePolls: true,
+    enableWatchTogether: true,
+    enableHandwriting: true,
+    enableAIAssistant: true,
+  };
   
   const { data, isLoading: messagesLoading } = api.chat.getMessages.useQuery(
     { chatId, limit: 50 },

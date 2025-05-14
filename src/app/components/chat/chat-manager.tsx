@@ -147,6 +147,8 @@ export function ChatManager() {
 
   // Watch for new chats from the context
   useEffect(() => {
+    console.log('New chat context update:', { newChatId, newChatUser });
+    
     if (newChatId && newChatUser) {
       // Check if chat already exists
       if (!activeChats.some((chat) => chat.id === newChatId)) {

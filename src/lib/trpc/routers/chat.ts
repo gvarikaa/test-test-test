@@ -92,22 +92,44 @@ const userChatPreferencesSchema = z.object({
 
 export const chatRouter = router({
   getChatSettings: protectedProcedure
-    .input(z.object({ chatId: z.string() }))
+    .input(z.object({ 
+      chatId: z.string().min(1, 'Chat ID is required') 
+    }))
     .query(async ({ ctx, input }) => {
       try {
+        // Log the request for debugging
+        console.log('getChatSettings called with:', { 
+          input,
+          chatId: input.chatId,
+          userId: ctx.session.user.id 
+        });
+
+        // Validate chatId
+        if (!input.chatId || input.chatId === 'demo' || input.chatId.length === 0) {
+          console.error('Invalid chatId in getChatSettings:', input);
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `Invalid chat ID provided: "${input.chatId}"`,
+          });
+        }
+
         const chat = await ctx.db.chat.findUnique({
           where: { id: input.chatId },
           include: {
             users: true,
-            chatSettings: true,
-            lastMessage: true,
+            settings: true,
+            messages: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
           },
         });
 
         if (!chat) {
+          console.log('Chat not found for ID:', input.chatId);
           throw new TRPCError({
             code: 'NOT_FOUND',
-            message: 'Chat not found',
+            message: `Chat not found with ID: ${input.chatId}`,
           });
         }
 
@@ -120,11 +142,13 @@ export const chatRouter = router({
           });
         }
 
+        const lastMessage = chat.messages[0];
+        
         return {
           chatId: chat.id,
           isGroup: chat.isGroup,
-          settings: chat.chatSettings,
-          lastActivity: chat.lastMessage?.createdAt || chat.updatedAt,
+          settings: chat.settings,
+          lastActivity: lastMessage?.createdAt || chat.updatedAt,
           members: chat.users,
         };
       } catch (error) {
@@ -675,6 +699,7 @@ export const chatRouter = router({
     .mutation(async ({ ctx, input }) => {
       // Log the received input for debugging
       console.log('createOrGetChat received input:', input);
+      console.log('Current user:', ctx.session.user.id);
       
       // Extra validation to ensure we have a userId
       if (!input || typeof input !== 'object') {
@@ -833,6 +858,27 @@ export const chatRouter = router({
                 },
               ],
             },
+            settings: {
+              create: {
+                // Default settings for new chat
+                defaultLanguage: 'en',
+                translationEnabled: true,
+                autoTranslateEnabled: false,
+                mediaAutoDownload: true,
+                readReceiptsEnabled: true,
+                typingIndicatorsEnabled: true,
+                enableVoiceCalls: true,
+                enableVideoCalls: true,
+                enableGroupCalls: true,
+                enableScreenSharing: true,
+                enableMessageThreads: true,
+                enableReactions: true,
+                enablePolls: true,
+                enableWatchTogether: true,
+                enableHandwriting: true,
+                enableAIAssistant: true,
+              },
+            },
           },
           include: {
             participants: {
@@ -846,10 +892,12 @@ export const chatRouter = router({
                 },
               },
             },
+            settings: true,
           },
         });
         
         console.log('Created new chat:', newChat.id);
+        console.log('New chat settings:', newChat.settings);
         
         // Use the same safe date conversion functions for the new chat
         const safeDate = (date: Date | null | undefined) => {
