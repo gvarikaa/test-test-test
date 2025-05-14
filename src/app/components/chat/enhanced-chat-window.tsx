@@ -78,12 +78,19 @@ export function EnhancedChatWindow({
 }: EnhancedChatWindowProps) {
   // Log props for debugging
   console.log('EnhancedChatWindow props:', { chatId, otherUser, isMinimized });
+  
+  // Check if this is a valid persisted chat ID (not temporary)
+  const isValidChatId = chatId && 
+                       chatId.length > 0 && 
+                       !chatId.startsWith('temp-') && 
+                       !chatId.startsWith('demo-');
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   
   // Enhanced features states
   const [showVoiceCall, setShowVoiceCall] = useState(false);
@@ -110,19 +117,11 @@ export function EnhancedChatWindow({
   // Detect if this is a demo chat
   const isDemo = otherUser.isDemo || (chatId && chatId.startsWith('clb'));
   
-  // TRPC queries and mutations
-  // Note: ChatSettings query is temporarily disabled due to empty chatId issue
-  // const { data: chatSettings, error: chatSettingsError } = api.chat.getChatSettings.useQuery(
-  //   { chatId: chatId || '' },
-  //   { 
-  //     enabled: !isDemo && !!session?.user?.id && !!chatId && chatId !== 'demo' && chatId.length > 0,
-  //     retry: false,
-  //     retryOnMount: false,
-  //   }
-  // );
+  // Debug log for chat ID
+  console.log('EnhancedChatWindow - chatId:', chatId, 'isValidChatId:', isValidChatId, 'isDemo:', isDemo);
   
-  // Use default settings for now
-  const chatSettings = {
+  // Default settings to use
+  const defaultChatSettings = {
     enableVoiceCalls: true,
     enableVideoCalls: true,
     enableGroupCalls: true,
@@ -134,6 +133,36 @@ export function EnhancedChatWindow({
     enableHandwriting: true,
     enableAIAssistant: true,
   };
+  
+  // Fetch chat settings only when we have a valid chat ID
+  const { data: chatSettingsData, isLoading: settingsLoading, error: settingsError } = api.chat.getChatSettings.useQuery(
+    { chatId },
+    { 
+      enabled: isValidChatId && !!session?.user?.id && !isDemo && chatId.length > 0,
+      staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+      retry: false, // Don't retry on error
+      onError: (error) => {
+        console.error('Error fetching chat settings:', error);
+        // Use default settings on error
+        setSettingsLoaded(true);
+      },
+      onSuccess: () => {
+        setSettingsLoaded(true);
+      }
+    }
+  );
+  
+  // Use fetched settings if available, otherwise use defaults
+  const effectiveChatSettings = chatSettingsData?.settings || defaultChatSettings;
+  
+  // Mark settings as loaded if we're using defaults (demo, invalid, etc)
+  useEffect(() => {
+    if (!isValidChatId || isDemo || !chatId || chatId.length === 0) {
+      setSettingsLoaded(true);
+    }
+  }, [isValidChatId, isDemo, chatId]);
   
   const { data, isLoading: messagesLoading } = api.chat.getMessages.useQuery(
     { chatId, limit: 50 },
@@ -409,7 +438,7 @@ export function EnhancedChatWindow({
             <button
               onClick={() => handleVoiceCall('AUDIO')}
               className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
-              disabled={!chatSettings?.enableVoiceCalls}
+              disabled={!effectiveChatSettings.enableVoiceCalls}
             >
               <Phone className="h-5 w-5" />
             </button>
@@ -418,7 +447,7 @@ export function EnhancedChatWindow({
             <button
               onClick={() => handleVoiceCall('VIDEO')}
               className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
-              disabled={!chatSettings?.enableVideoCalls}
+              disabled={!effectiveChatSettings.enableVideoCalls}
             >
               <Video className="h-5 w-5" />
             </button>

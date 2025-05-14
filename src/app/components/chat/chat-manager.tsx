@@ -28,6 +28,7 @@ type ChatContextType = {
   clearError: () => void;
   newChatId: string | null;
   newChatUser: User | null;
+  tempChatId: string | null;
 };
 
 // Create the context
@@ -47,6 +48,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [errorState, setErrorState] = useState<{ message: string; userId?: string } | null>(null);
   const [newChatId, setNewChatId] = useState<string | null>(null);
   const [newChatUser, setNewChatUser] = useState<User | null>(null);
+  const [tempChatId, setTempChatId] = useState<string | null>(null);
   const { data: session, status: sessionStatus } = useSession();
   const { mutate: createChat, isLoading, isError, error } = api.chat.createOrGetChat.useMutation({
     onSuccess: (newChat) => {
@@ -58,6 +60,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       if (otherParticipant) {
         setNewChatId(newChat.id);
         setNewChatUser(otherParticipant.user);
+        setTempChatId(null); // Clear temp ID on success
       }
     },
     onError: (err) => {
@@ -68,10 +71,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   // Reset error when session changes
   useEffect(() => {
-    if (errorState) {
-      setErrorState(null);
+    if (sessionStatus === 'authenticated' || sessionStatus === 'unauthenticated') {
+      if (errorState) {
+        setErrorState(null);
+      }
     }
-  }, [sessionStatus]);
+  }, [sessionStatus]); // Don't include errorState in dependencies
 
   // Function to start a chat with a user with improved error handling
   const startChat = (userId: string) => {
@@ -93,6 +98,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       if (!userId || typeof userId !== 'string') {
         throw new Error('Invalid userId provided');
       }
+      
+      // Create a temporary chat ID
+      const tempId = `temp-${Date.now()}-${userId}`;
+      setTempChatId(tempId);
 
       // Create a proper input object for the mutation
       const input = { userId };
@@ -104,12 +113,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           onError: (err) => {
             console.error("Failed to start chat:", err);
             setErrorState({ message: "ჩეთის დაწყება ვერ მოხერხდა, გთხოვთ სცადოთ მოგვიანებით", userId });
+            setTempChatId(null); // Clear temp ID on error
           }
         }
       );
     } catch (err) {
       console.error("Unexpected error creating chat:", err);
       setErrorState({ message: "დაფიქსირდა შეცდომა. გთხოვთ სცადოთ მოგვიანებით.", userId });
+      setTempChatId(null); // Clear temp ID on error
     }
   };
 
@@ -121,7 +132,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     isLoading,
     clearError,
     newChatId,
-    newChatUser
+    newChatUser,
+    tempChatId
   };
 
   return (
@@ -138,7 +150,7 @@ export function ChatManager() {
   const [onlineUsers, setOnlineUsers] = useState<Record<string, boolean>>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { data: session, status: sessionStatus } = useSession();
-  const { newChatId, newChatUser, startChat } = useChatManager();
+  const { newChatId, newChatUser, tempChatId, startChat } = useChatManager();
 
   // Reset error state when session changes
   useEffect(() => {
@@ -147,25 +159,49 @@ export function ChatManager() {
 
   // Watch for new chats from the context
   useEffect(() => {
-    console.log('New chat context update:', { newChatId, newChatUser });
+    console.log('New chat context update:', { newChatId, newChatUser, tempChatId });
     
-    if (newChatId && newChatUser) {
-      // Check if chat already exists
-      if (!activeChats.some((chat) => chat.id === newChatId)) {
-        const chatToAdd = {
-          id: newChatId,
+    // Add temporary chat immediately when requested
+    if (tempChatId && newChatUser && !newChatId) {
+      if (!activeChats.some((chat) => chat.id === tempChatId || chat.otherUser.id === newChatUser.id)) {
+        const tempChat = {
+          id: tempChatId,
           otherUser: newChatUser,
           unreadCount: 0,
         };
         
-        console.log('Adding new chat from context:', chatToAdd);
-        setActiveChats((prev) => [...prev, chatToAdd]);
+        console.log('Adding temporary chat:', tempChat);
+        setActiveChats((prev) => [...prev, tempChat]);
       }
+    }
+    
+    // Replace temp chat with real chat when it's created
+    if (newChatId && newChatUser) {
+      setActiveChats((prev) => {
+        // Remove any temp chat for this user if it exists
+        const filtered = prev.filter((chat) => 
+          !chat.id.startsWith('temp-') || chat.otherUser.id !== newChatUser.id
+        );
+        
+        // Check if real chat already exists
+        if (!filtered.some((chat) => chat.id === newChatId)) {
+          const realChat = {
+            id: newChatId,
+            otherUser: newChatUser,
+            unreadCount: 0,
+          };
+          
+          console.log('Replacing temp chat with real chat:', realChat);
+          return [...filtered, realChat];
+        }
+        
+        return filtered;
+      });
       
       // Make sure the chat is not minimized
       setMinimizedChats((prev) => prev.filter((id) => id !== newChatId));
     }
-  }, [newChatId, newChatUser, activeChats]);
+  }, [newChatId, newChatUser, tempChatId]);
 
   // trpc query to get recent chats with proper error handling
   const { data: chatData, error: chatDataError, isError: isChatDataError, isLoading: isChatDataLoading } = api.chat.getRecentChats.useQuery(
